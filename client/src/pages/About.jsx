@@ -1,122 +1,398 @@
 import React from 'react';
+import {
+  Container,
+  Typography,
+  Box,
+  Grid,
+  Card,
+  CardContent,
+  Avatar,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Paper,
+  Chip,
+  Divider,
+  Breadcrumbs,
+  Link as MuiLink
+} from '@mui/material';
+import {
+  Science,
+  Speed,
+  Security,
+  Analytics,
+  AutoAwesome,
+  CheckCircle,
+  Waves,
+  Biotech,
+  Storage,
+  NavigateNext,
+  Home,
+  Info
+} from '@mui/icons-material';
+import { Link } from 'react-router-dom';
 
 const About = () => {
-  const teamMembers = [
+  const features = [
     {
-      name: 'Alex Chen',
-      role: 'Lead Developer',
-      description: 'Full-stack developer with expertise in React and Node.js. Passionate about creating scalable web applications.',
-      image: 'https://api.dicebear.com/6.x/avataaars/svg?seed=Alex',
-      github: 'github.com/alexchen',
-      linkedin: 'linkedin.com/in/alexchen',
-      specialties: ['React', 'Node.js', 'AWS']
+      icon: <AutoAwesome sx={{ fontSize: 32 }} />,
+      title: 'AI-Powered Analysis',
+      description: 'Automatic metadata extraction using advanced machine learning and OCR technology for comprehensive data insights'
     },
     {
-      name: 'Sarah Johnson',
-      role: 'UX Designer',
-      description: 'Creative designer focused on user-centered design principles and building intuitive interfaces.',
-      image: 'https://api.dicebear.com/6.x/avataaars/svg?seed=Sarah',
-      github: 'github.com/sarahj',
-      linkedin: 'linkedin.com/in/sarahjohnson',
-      specialties: ['UI/UX', 'Figma', 'User Research']
+      icon: <Speed sx={{ fontSize: 32 }} />,
+      title: 'Lightning Fast Processing',
+      description: 'Real-time file processing with instant feedback, status updates, and progress tracking for seamless workflow'
     },
     {
-      name: 'Marcus Rodriguez',
-      role: 'Backend Engineer',
-      description: 'Database expert specializing in high-performance systems and data optimization.',
-      image: 'https://api.dicebear.com/6.x/avataaars/svg?seed=Marcus',
-      github: 'github.com/marcusrod',
-      linkedin: 'linkedin.com/in/marcusrodriguez',
-      specialties: ['Python', 'PostgreSQL', 'Redis']
+      icon: <Security sx={{ fontSize: 32 }} />,
+      title: 'Enterprise Security',
+      description: 'Bank-grade security with organized, searchable data management, version control, and secure access controls'
     },
     {
-      name: 'Emily Zhang',
-      role: 'Frontend Developer',
-      description: 'Frontend specialist with a keen eye for animations and responsive design.',
-      image: 'https://api.dicebear.com/6.x/avataaars/svg?seed=Emily',
-      github: 'github.com/emilyzhang',
-      linkedin: 'linkedin.com/in/emilyzhang',
-      specialties: ['Vue.js', 'CSS', 'WebGL']
+      icon: <Analytics sx={{ fontSize: 32 }} />,
+      title: 'Rich Analytics',
+      description: 'Comprehensive data insights with geographic mapping, temporal analysis, and scientific pattern recognition'
+    }
+  ];
+
+  const capabilities = [
+    'Ocean temperature, salinity, and current data processing (NetCDF, CSV formats)',
+    'Fish species identification and population data analysis with AI recognition',
+    'Otolith image analysis with advanced OCR text extraction and measurements',
+    'eDNA sequence data processing and genetic pattern identification',
+    'Research document analysis, indexing, and intelligent content extraction',
+    'Automatic geographic coordinate extraction and interactive mapping',
+    'Quality assessment, data validation, and completeness scoring',
+    'Multi-format support with seamless conversion and standardization'
+  ];
+
+  const techSpecs = [
+    {
+      icon: <Storage sx={{ fontSize: 24 }} />,
+      title: 'Storage & Processing',
+      specs: ['500MB max file size', '15+ file formats', 'Real-time processing', 'Cloud storage']
     },
     {
-      name: 'David Kumar',
-      role: 'DevOps Engineer',
-      description: 'Infrastructure expert ensuring smooth deployments and optimal system performance.',
-      image: 'https://api.dicebear.com/6.x/avataaars/svg?seed=David',
-      github: 'github.com/davidk',
-      linkedin: 'linkedin.com/in/davidkumar',
-      specialties: ['Docker', 'Kubernetes', 'CI/CD']
+      icon: <Biotech sx={{ fontSize: 24 }} />,
+      title: 'AI & Analytics',
+      specs: ['OCR text extraction', 'Species recognition', 'Geographic detection', 'Pattern analysis']
     },
     {
-      name: 'Lisa Anderson',
-      role: 'Quality Assurance',
-      description: 'Detail-oriented QA engineer dedicated to delivering bug-free software.',
-      image: 'https://api.dicebear.com/6.x/avataaars/svg?seed=Lisa',
-      github: 'github.com/lisaa',
-      linkedin: 'linkedin.com/in/lisaanderson',
-      specialties: ['Testing', 'Automation', 'Security']
+      icon: <Science sx={{ fontSize: 24 }} />,
+      title: 'Research Ready',
+      specs: ['Metadata standards', 'Quality metrics', 'Export capabilities', 'Version control']
     }
   ];
 
   return (
-    <div className="container">
-      <div className="header">
-        <h1 className="header__title">Our Team</h1>
-        <p className="header__subtitle">Meet the talented individuals behind AquaNexa</p>
-      </div>
+    <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 4 }}>
+      <Container maxWidth="lg">
+        {/* Breadcrumbs */}
+        <Breadcrumbs 
+          separator={<NavigateNext fontSize="small" />} 
+          sx={{ mb: 4 }}
+        >
+          <MuiLink
+            component={Link}
+            to="/"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              color: 'text.secondary',
+              textDecoration: 'none',
+              '&:hover': { color: 'primary.main' }
+            }}
+          >
+            <Home sx={{ mr: 0.5, fontSize: 18 }} />
+            Home
+          </MuiLink>
+          <Typography color="text.primary" sx={{ display: 'flex', alignItems: 'center' }}>
+            <Info sx={{ mr: 0.5, fontSize: 18 }} />
+            About Platform
+          </Typography>
+        </Breadcrumbs>
 
-      <div className="team-grid">
-        {teamMembers.map((member, index) => (
-          <div className="team-card" key={index}>
-            <div className="team-card__image-container">
-              <img
-                src={member.image}
-                alt={member.name}
-                className="team-card__image"
-              />
-              <div className="team-card__image-overlay"></div>
-            </div>
+        {/* Header */}
+        <Box sx={{ textAlign: 'center', mb: 10 }}>
+          <Typography
+            variant="h2"
+            sx={{
+              fontSize: { xs: '2.5rem', md: '3.5rem' },
+              fontWeight: 700,
+              mb: 4,
+              background: 'linear-gradient(135deg, #0066cc 0%, #00bcd4 100%)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}
+          >
+            About AquaNexus
+          </Typography>
+          <Typography
+            variant="h5"
+            color="text.secondary"
+            sx={{ 
+              maxWidth: 800, 
+              mx: 'auto', 
+              lineHeight: 1.6,
+              fontSize: '1.3rem',
+              fontWeight: 400
+            }}
+          >
+            Advanced marine research data management platform built for scientists, researchers, 
+            and marine biologists to streamline their data workflow and accelerate discoveries.
+          </Typography>
+        </Box>
+
+        {/* Mission Statement */}
+        <Paper
+          sx={{
+            p: { xs: 4, md: 8 },
+            mb: 10,
+            background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 4,
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Background decoration */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: -50,
+              right: -50,
+              width: 200,
+              height: 200,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(0, 102, 204, 0.1) 0%, rgba(0, 188, 212, 0.1) 100%)',
+              zIndex: 0
+            }}
+          />
+          
+          <Grid container spacing={6} alignItems="center" sx={{ position: 'relative', zIndex: 1 }}>
+            <Grid item xs={12} md={4}>
+              <Avatar
+                sx={{
+                  width: { xs: 100, md: 120 },
+                  height: { xs: 100, md: 120 },
+                  mx: { xs: 'auto', md: 0 },
+                  background: 'linear-gradient(135deg, #0066cc 0%, #00bcd4 100%)',
+                  mb: { xs: 4, md: 0 },
+                  boxShadow: '0 12px 24px rgba(0, 102, 204, 0.3)'
+                }}
+              >
+                <Waves sx={{ fontSize: { xs: 50, md: 60 } }} />
+              </Avatar>
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <Typography 
+                variant="h4" 
+                fontWeight={700} 
+                sx={{ mb: 3, color: 'text.primary' }}
+              >
+                Our Mission
+              </Typography>
+              <Typography 
+                variant="body1" 
+                sx={{ 
+                  fontSize: '1.2rem', 
+                  lineHeight: 1.7, 
+                  mb: 3,
+                  color: 'text.secondary'
+                }}
+              >
+                To empower marine researchers with intelligent data management tools that accelerate 
+                scientific discovery and promote ocean conservation through better data accessibility, 
+                analysis, and collaborative research capabilities.
+              </Typography>
+              <Typography 
+                variant="body1" 
+                sx={{ 
+                  fontSize: '1.2rem', 
+                  lineHeight: 1.7,
+                  color: 'text.secondary'
+                }}
+              >
+                We believe that efficient, AI-powered data management is crucial for advancing marine science 
+                and protecting our oceans for future generations through data-driven insights and discoveries.
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+
+        {/* Key Features */}
+        <Box sx={{ mb: 10 }}>
+          <Typography
+            variant="h3"
+            sx={{
+              fontSize: { xs: '2rem', md: '2.75rem' },
+              fontWeight: 700,
+              textAlign: 'center',
+              mb: 8,
+              color: 'text.primary'
+            }}
+          >
+            Key Features & Capabilities
+          </Typography>
+          
+          <Grid container spacing={4}>
+            {features.map((feature, index) => (
+              <Grid item xs={12} md={6} key={index}>
+                <Card
+                  sx={{
+                    height: '100%',
+                    p: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    '&:hover': {
+                      transform: 'translateY(-6px)',
+                      boxShadow: '0 16px 32px rgba(0, 0, 0, 0.12)',
+                      borderColor: 'primary.main'
+                    }
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
+                      <Avatar
+                        sx={{
+                          bgcolor: 'primary.main',
+                          width: 64,
+                          height: 64,
+                          mr: 3,
+                          boxShadow: '0 8px 24px rgba(0, 102, 204, 0.3)'
+                        }}
+                      >
+                        {feature.icon}
+                      </Avatar>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography 
+                          variant="h5" 
+                          fontWeight={700}
+                          sx={{ mb: 2, color: 'text.primary' }}
+                        >
+                          {feature.title}
+                        </Typography>
+                        <Typography
+                          variant="body1"
+                          color="text.secondary"
+                          sx={{ lineHeight: 1.7, fontSize: '1rem' }}
+                        >
+                          {feature.description}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+
+        {/* Capabilities & Tech Specs */}
+        <Grid container spacing={8}>
+          {/* Platform Capabilities */}
+          <Grid item xs={12} md={6}>
+            <Typography 
+              variant="h4" 
+              fontWeight={700} 
+              sx={{ mb: 4, color: 'text.primary' }}
+            >
+              Platform Capabilities
+            </Typography>
             
-            <div className="team-card__content">
-              <h3 className="team-card__name">{member.name}</h3>
-              <span className="team-card__role">{member.role}</span>
-              <p className="team-card__description">{member.description}</p>
-              
-              <div className="team-card__specialties">
-                {member.specialties.map((specialty, idx) => (
-                  <span key={idx} className="team-card__specialty">
-                    {specialty}
-                  </span>
-                ))}
-              </div>
-
-              <div className="team-card__social">
-                <a
-                  href={`https://${member.github}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="team-card__social-link"
+            <List sx={{ p: 0 }}>
+              {capabilities.map((capability, index) => (
+                <ListItem 
+                  key={index} 
+                  sx={{ 
+                    px: 0, 
+                    py: 2,
+                    alignItems: 'flex-start'
+                  }}
                 >
-                  <svg className="team-card__social-icon" viewBox="0 0 24 24">
-                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.207 11.387.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.085 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/>
-                  </svg>
-                </a>
-                <a
-                  href={`https://${member.linkedin}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="team-card__social-link"
+                  <ListItemIcon sx={{ minWidth: 40, mt: 0.5 }}>
+                    <CheckCircle color="success" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={capability}
+                    primaryTypographyProps={{
+                      variant: 'body1',
+                      sx: { lineHeight: 1.6, fontSize: '1rem' }
+                    }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Grid>
+          
+          {/* Technical Specifications */}
+          <Grid item xs={12} md={6}>
+            <Typography 
+              variant="h4" 
+              fontWeight={700} 
+              sx={{ mb: 4, color: 'text.primary' }}
+            >
+              Technical Specifications
+            </Typography>
+            
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {techSpecs.map((spec, index) => (
+                <Paper 
+                  key={index}
+                  sx={{ 
+                    p: 4, 
+                    bgcolor: 'grey.50',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 3,
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
+                    }
+                  }}
                 >
-                  <svg className="team-card__social-icon" viewBox="0 0 24 24">
-                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                  </svg>
-                </a>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <Avatar
+                      sx={{
+                        bgcolor: 'primary.main',
+                        mr: 2,
+                        width: 48,
+                        height: 48
+                      }}
+                    >
+                      {spec.icon}
+                    </Avatar>
+                    <Typography variant="h6" fontWeight={600} color="text.primary">
+                      {spec.title}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {spec.specs.map((item, itemIndex) => (
+                      <Chip 
+                        key={itemIndex}
+                        label={item} 
+                        size="small"
+                        sx={{
+                          bgcolor: 'primary.50',
+                          color: 'primary.main',
+                          fontWeight: 500,
+                          borderRadius: 2
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Paper>
+              ))}
+            </Box>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
   );
 };
 
