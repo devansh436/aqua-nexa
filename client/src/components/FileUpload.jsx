@@ -1,61 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { toast } from 'react-toastify';
-import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  Grid,
-  Card,
-  CardContent,
-  LinearProgress,
-  Chip,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  IconButton,
-  Divider,
-  Stack,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
-} from '@mui/material';
-import {
-  CloudUpload,
-  CheckCircle,
-  Error,
-  Pending,
-  Visibility,
-  Delete,
-  Refresh,
-  ExpandMore,
-  Image,
-  TableChart,
-  InsertDriveFile,
-  Science,
-  PictureAsPdf,
-  Description,
-  DataObject,
-  Archive,
-  Code
-} from '@mui/icons-material';
 import { uploadFile, getFileStatus, checkHealth } from '../services/api';
 import FilePreview from './FilePreview';
 import UploadProgress from './UploadProgress';
+import { CloudUploadIcon, CheckCircleIcon, ErrorIcon, PendingIcon, VisibilityIcon, DeleteIcon, RefreshIcon, ImageIcon, FileIcon } from './icons';
 
-const FileUpload = () => {
+function FileUpload() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -88,49 +39,49 @@ const FileUpload = () => {
       value: 'ocean_data',
       label: '🌊 Ocean Data',
       description: 'Temperature, salinity, current data',
-      icon: <Science />,
+      icon: <FileIcon />,
       accepts: '.nc,.csv,.xlsx,.json'
     },
     {
       value: 'fish_data',
       label: '🐟 Fish Data',
       description: 'Species counts, catch data',
-      icon: <TableChart />,
+      icon: <FileIcon />,
       accepts: '.csv,.xlsx,.json'
     },
     {
       value: 'otolith_image',
       label: '🔬 Otolith Images',
       description: 'Fish ear bone microscopy',
-      icon: <Image />,
+      icon: <ImageIcon />,
       accepts: '.jpg,.jpeg,.png,.tiff,.bmp'
     },
     {
       value: 'research_table',
       label: '📊 Research Tables',
       description: 'Data tables from images/documents',
-      icon: <TableChart />,
+      icon: <FileIcon />,
       accepts: '.jpg,.jpeg,.png,.pdf'
     },
     {
       value: 'document',
       label: '📄 Documents',
       description: 'Research papers, reports',
-      icon: <PictureAsPdf />,
+      icon: <FileIcon />,
       accepts: '.pdf,.doc,.docx,.txt'
     },
     {
       value: 'scientific_data',
       label: '🧪 Scientific Data',
       description: 'JSON, XML, NetCDF files',
-      icon: <DataObject />,
+      icon: <FileIcon />,
       accepts: '.json,.xml,.nc,.h5,.mat'
     },
     {
       value: 'other',
       label: '📁 Other',
       description: 'All supported file types',
-      icon: <InsertDriveFile />,
+      icon: <FileIcon />,
       accepts: '*'
     }
   ];
@@ -358,12 +309,12 @@ const FileUpload = () => {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle color="success" />;
+        return <CheckCircleIcon color="success" />;
       case 'failed':
         return <Error color="error" />;
       case 'processing':
       default:
-        return <Pending color="warning" />;
+        return <PendingIcon color="warning" />;
     }
   };
 
@@ -421,358 +372,311 @@ const FileUpload = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <div className="upload">
       {/* Server Status & Stats */}
-      <Card sx={{ mb: 3, bgcolor: 'primary.50' }}>
-        <CardContent>
-          <Grid container alignItems="center" spacing={2}>
-            <Grid item>
-              {getServerStatusChip()}
-            </Grid>
-            <Grid item>
-              <Button
-                onClick={checkServerHealth}
-                size="small"
-                variant="outlined"
-                startIcon={<Refresh />}
-              >
-                Check Connection
-              </Button>
-            </Grid>
-            <Grid item sx={{ ml: 'auto' }}>
-              <Typography variant="body2" color="text.secondary">
-                Total Files Uploaded: <strong>{uploadedFiles.length}</strong>
-              </Typography>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+      <div className="card mb-4">
+        <div className="flex items-center gap-4">
+          <div className={`upload__status-chip upload__status-chip--${serverHealth}`}>
+            {serverHealth === 'connected' && '🟢 Server Connected'}
+            {serverHealth === 'disconnected' && '🔴 Server Disconnected'}
+            {serverHealth === 'checking' && '🟡 Checking Connection'}
+          </div>
+          
+          <button 
+            className="button button--secondary flex items-center gap-2"
+            onClick={checkServerHealth}
+          >
+            <RefreshIcon />
+            Check Connection
+          </button>
+          
+          <div className="ml-auto text-sm text-secondary">
+            Total Files Uploaded: <span className="font-semibold">{uploadedFiles.length}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Upload Configuration */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            📝 Upload Configuration
-          </Typography>
-          
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Select Data Category</InputLabel>
-                <Select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  label="Select Data Category"
-                >
-                  {categories.map((cat) => (
-                    <MenuItem key={cat.value} value={cat.value}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {cat.icon}
-                        <Box>
-                          <Typography variant="body1">{cat.label}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {cat.description} • {cat.accepts}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+      <div className="card mb-4">
+        <h2 className="text-xl font-semibold mb-4">
+          📝 Upload Configuration
+        </h2>
+        
+        <div className="grid gap-4">
+          <div className="w-full">
+            <label htmlFor="category" className="upload-form__label">
+              Select Data Category
+            </label>
+            <select
+              id="category"
+              className="upload-form__select"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              {categories.map((cat) => (
+                <option key={cat.value} value={cat.value}>
+                  {cat.label} - {cat.description}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Description"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="description" className="upload-form__label">
+                Description
+              </label>
+              <textarea
+                id="description"
+                className="upload-form__input"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brief description of your data..."
-                multiline
-                maxRows={3}
-                size="small"
+                rows={3}
               />
-            </Grid>
+            </div>
 
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Tags"
+            <div>
+              <label htmlFor="tags" className="upload-form__label">
+                Tags
+              </label>
+              <input
+                id="tags"
+                type="text"
+                className="upload-form__input"
                 value={tags}
                 onChange={(e) => setTags(e.target.value)}
                 placeholder="tag1, tag2, tag3..."
-                helperText="Comma-separated tags for organization"
-                size="small"
               />
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+              <span className="text-sm text-secondary mt-1 block">
+                Comma-separated tags for organization
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* File Drop Zone */}
-      <Paper
+      <div
         {...getRootProps()}
-        sx={{
-          p: 4,
-          mb: 3,
-          textAlign: 'center',
-          cursor: uploading || serverHealth !== 'connected' ? 'not-allowed' : 'pointer',
-          bgcolor: isDragActive ? 'primary.50' : 'background.paper',
-          border: '2px dashed',
-          borderColor: isDragActive ? 'primary.main' : 'divider',
-          transition: 'all 0.3s ease',
-          opacity: uploading || serverHealth !== 'connected' ? 0.6 : 1,
-          '&:hover': {
-            borderColor: 'primary.main',
-            bgcolor: 'primary.50'
-          }
-        }}
+        className={`upload-zone ${isDragActive ? 'upload-zone--active' : ''} ${
+          uploading || serverHealth !== 'connected' ? 'opacity-60 cursor-not-allowed' : ''
+        }`}
       >
         <input {...getInputProps()} />
         
         {serverHealth !== 'connected' ? (
-          <Box>
-            <Error sx={{ fontSize: 48, color: 'error.main', mb: 2 }} />
-            <Typography variant="h6" color="error">
+          <div className="text-center">
+            <div className="upload-zone__icon text-error">
+              <ErrorIcon />
+            </div>
+            <h3 className="upload-zone__title text-error">
               ❌ Server Not Connected
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
+            </h3>
+            <p className="upload-zone__text">
               Please start the backend server on port 5000
-            </Typography>
-          </Box>
+            </p>
+          </div>
         ) : uploading ? (
-          <Box>
-            <CloudUpload sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-            <Typography variant="h6" color="primary">
+          <div className="text-center">
+            <div className="upload-zone__icon text-primary">
+              <CloudUploadIcon />
+            </div>
+            <h3 className="upload-zone__title">
               🚀 Uploading...
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
+            </h3>
+            <p className="upload-zone__text">
               Please wait while your file is being processed
-            </Typography>
-          </Box>
+            </p>
+          </div>
         ) : isDragActive ? (
-          <Box>
-            <CloudUpload sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-            <Typography variant="h6" color="primary">
+          <div className="text-center">
+            <div className="upload-zone__icon text-primary">
+              <CloudUploadIcon />
+            </div>
+            <h3 className="upload-zone__title">
               Drop your files here! 🎯
-            </Typography>
-          </Box>
+            </h3>
+          </div>
         ) : (
-          <Box>
-            <CloudUpload sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
+          <div className="text-center">
+            <div className="upload-zone__icon">
+              <CloudUploadIcon />
+            </div>
+            <h3 className="upload-zone__title">
               Drag & drop files here, or click to browse
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            </h3>
+            <p className="upload-zone__text">
               <strong>Supported formats:</strong> Images (JPG, PNG, GIF, BMP, TIFF, WebP), 
               Spreadsheets (CSV, XLSX, XLS), Documents (PDF, DOC, DOCX, TXT), 
               Data (JSON, XML), Archives (ZIP), Scientific (NetCDF)
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
+            </p>
+            <p className="upload-zone__text">
               Maximum file size: <strong>500MB per file</strong>
-            </Typography>
+            </p>
             {selectedCategory !== 'other' && (
-              <Chip 
-                label={`Selected category accepts: ${categories.find(c => c.value === selectedCategory)?.accepts}`}
-                size="small"
-                sx={{ mt: 1 }}
-              />
+              <div className="upload-form__chip">
+                Selected category accepts: {categories.find(c => c.value === selectedCategory)?.accepts}
+              </div>
             )}
-          </Box>
+          </div>
         )}
-      </Paper>
+      </div>
 
       {/* Upload Progress */}
       {uploading && (
-        <Box sx={{ mb: 3 }}>
+        <div className="mb-4">
           <UploadProgress progress={uploadProgress} />
-        </Box>
+        </div>
       )}
 
       {/* Uploaded Files List */}
       {uploadedFiles.length > 0 && (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              📁 Uploaded Files ({uploadedFiles.length})
-            </Typography>
-            
-            <List>
-              {uploadedFiles.map((file, index) => (
-                <React.Fragment key={file.id}>
-                  <ListItem sx={{ alignItems: 'flex-start' }}>
-                    <ListItemIcon sx={{ mt: 1 }}>
-                      {getFileTypeIcon(file.detectedType)}
-                    </ListItemIcon>
-                    
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          {getStatusIcon(file.status)}
-                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                            {file.name}
-                          </Typography>
-                          <Chip
-                            label={file.status}
-                            size="small"
-                            color={getStatusColor(file.status)}
-                          />
-                          {file.detectedType && (
-                            <Chip
-                              label={file.detectedType.toUpperCase()}
-                              size="small"
-                              variant="outlined"
-                            />
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Box>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            📦 {formatFileSize(file.size)} • 📁 {file.category.replace('_', ' ')} •
-                            📅 {file.uploadDate.toLocaleString()}
-                          </Typography>
-                          
-                          {file.description && (
-                            <Typography variant="body2" sx={{ mb: 1 }}>
-                              📝 {file.description}
-                            </Typography>
-                          )}
-                          
-                          {file.tags && file.tags.length > 0 && (
-                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
-                              {file.tags.map((tag, tagIndex) => (
-                                <Chip key={tagIndex} label={tag} size="small" variant="outlined" />
-                              ))}
-                            </Box>
-                          )}
-                          
-                          {file.validationErrors && file.validationErrors.length > 0 && (
-                            <Alert severity="error" sx={{ mt: 1 }}>
-                              {file.validationErrors.map(err => err.message).join(', ')}
-                            </Alert>
-                          )}
-                          
-                          {file.extractedMetadata && file.status === 'completed' && (
-                            <Box sx={{ mt: 1 }}>
-                              {file.extractedMetadata.extractedText?.text && (
-                                <Chip 
-                                  label={`Text extracted (${file.extractedMetadata.extractedText.confidence}% confidence)`}
-                                  size="small"
-                                  color="info"
-                                  sx={{ mr: 1, mb: 0.5 }}
-                                />
-                              )}
-                              
-                              {file.extractedMetadata.csvInfo && (
-                                <Chip 
-                                  label={`CSV: ${file.extractedMetadata.csvInfo.rows} rows, ${file.extractedMetadata.csvInfo.columns} columns`}
-                                  size="small"
-                                  color="success"
-                                  sx={{ mr: 1, mb: 0.5 }}
-                                />
-                              )}
-                              
-                              {file.extractedMetadata.excelInfo && (
-                                <Chip 
-                                  label={`Excel: ${file.extractedMetadata.excelInfo.totalSheets} sheets`}
-                                  size="small"
-                                  color="info"
-                                  sx={{ mr: 1, mb: 0.5 }}
-                                />
-                              )}
-                              
-                              {file.extractedMetadata.imageInfo && (
-                                <Chip 
-                                  label={`Image: ${file.extractedMetadata.imageInfo.width}×${file.extractedMetadata.imageInfo.height}px, ${file.extractedMetadata.imageInfo.format}`}
-                                  size="small"
-                                  color="warning"
-                                  sx={{ mr: 1, mb: 0.5 }}
-                                />
-                              )}
-                              
-                              {file.extractedMetadata.pdfInfo && (
-                                <Chip 
-                                  label={`PDF: ${file.extractedMetadata.pdfInfo.pages} pages, ${file.extractedMetadata.pdfInfo.wordCount} words`}
-                                  size="small"
-                                  color="error"
-                                  sx={{ mr: 1, mb: 0.5 }}
-                                />
-                              )}
-                              
-                              {file.extractedMetadata.geoData?.hasGeoData && (
-                                <Chip 
-                                  label="🗺️ Geographic data detected"
-                                  size="small"
-                                  color="secondary"
-                                  sx={{ mr: 1, mb: 0.5 }}
-                                />
-                              )}
-                              
-                              {file.extractedMetadata.scientificPatterns?.found && (
-                                <Chip 
-                                  label="🔬 Scientific patterns found"
-                                  size="small"
-                                  color="primary"
-                                  sx={{ mr: 1, mb: 0.5 }}
-                                />
-                              )}
-                            </Box>
-                          )}
-                        </Box>
-                      }
-                    />
-                    
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {file.status === 'completed' && (
-                        <Button
-                          onClick={() => handlePreview(file)}
-                          size="small"
-                          variant="outlined"
-                          startIcon={<Visibility />}
-                        >
-                          Preview
-                        </Button>
-                      )}
-                      
-                      <IconButton
-                        onClick={() => handleDeleteFile(file.id)}
-                        size="small"
-                        color="error"
-                      >
-                        <Delete />
-                      </IconButton>
-                    </Box>
-                  </ListItem>
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">
+            📁 Uploaded Files ({uploadedFiles.length})
+          </h2>
+          
+          <div className="file-list">
+            {uploadedFiles.map((file, index) => (
+              <div key={file.id} className="file-card">
+                <div className="file-card__header">
+                  <div className="text-primary">
+                    {file.detectedType === 'image' ? <ImageIcon /> : <FileIcon />}
+                  </div>
                   
-                  {index < uploadedFiles.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
-          </CardContent>
-        </Card>
+                  <div className="file-card__title">
+                    {getStatusIcon(file.status)}
+                    {file.name}
+                  </div>
+                  
+                  <div className={`file-card__status file-card__status--${file.status}`}>
+                    {file.status}
+                  </div>
+                  
+                  {file.detectedType && (
+                    <div className="file-card__tag">
+                      {file.detectedType.toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="file-card__meta">
+                  📦 {formatFileSize(file.size)} • 📁 {file.category.replace('_', ' ')} •
+                  📅 {file.uploadDate.toLocaleString()}
+                </div>
+                
+                {file.description && (
+                  <div className="file-card__description">
+                    📝 {file.description}
+                  </div>
+                )}
+                
+                {file.tags && file.tags.length > 0 && (
+                  <div className="file-card__tags">
+                    {file.tags.map((tag, tagIndex) => (
+                      <div key={tagIndex} className="file-card__tag">
+                        {tag}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {file.validationErrors && file.validationErrors.length > 0 && (
+                  <div className="alert alert--error mt-2">
+                    {file.validationErrors.map(err => err.message).join(', ')}
+                  </div>
+                )}
+                
+                {file.extractedMetadata && file.status === 'completed' && (
+                  <div className="file-card__tags mt-2">
+                    {file.extractedMetadata.extractedText?.text && (
+                      <div className="file-card__tag file-card__tag--info">
+                        Text extracted ({file.extractedMetadata.extractedText.confidence}% confidence)
+                      </div>
+                    )}
+                    
+                    {file.extractedMetadata.csvInfo && (
+                      <div className="file-card__tag file-card__tag--success">
+                        CSV: {file.extractedMetadata.csvInfo.rows} rows, {file.extractedMetadata.csvInfo.columns} columns
+                      </div>
+                    )}
+                    
+                    {file.extractedMetadata.excelInfo && (
+                      <div className="file-card__tag file-card__tag--info">
+                        Excel: {file.extractedMetadata.excelInfo.totalSheets} sheets
+                      </div>
+                    )}
+                    
+                    {file.extractedMetadata.imageInfo && (
+                      <div className="file-card__tag file-card__tag--warning">
+                        Image: {file.extractedMetadata.imageInfo.width}×{file.extractedMetadata.imageInfo.height}px, {file.extractedMetadata.imageInfo.format}
+                      </div>
+                    )}
+                    
+                    {file.extractedMetadata.pdfInfo && (
+                      <div className="file-card__tag file-card__tag--error">
+                        PDF: {file.extractedMetadata.pdfInfo.pages} pages, {file.extractedMetadata.pdfInfo.wordCount} words
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="file-card__actions">
+                  {file.status === 'completed' && (
+                    <button
+                      onClick={() => handlePreview(file)}
+                      className="button--icon button--preview"
+                    >
+                      <VisibilityIcon />
+                    </button>
+                  )}
+                  
+                  <button
+                    onClick={() => handleDeleteFile(file.id)}
+                    className="button--icon button--delete"
+                  >
+                    <DeleteIcon />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* File Preview Dialog */}
-      <Dialog
-        open={previewDialog}
-        onClose={() => setPreviewDialog(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>
-          📄 File Preview & Metadata
-        </DialogTitle>
-        <DialogContent>
-          {selectedFile && (
-            <FilePreview file={selectedFile} />
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreviewDialog(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+      {/* File Preview Modal */}
+      {previewDialog && (
+        <dialog open className="modal">
+          <div className="modal__overlay" onClick={() => setPreviewDialog(false)} />
+          <div className="modal__content">
+            <div className="modal__header">
+              <h2 className="modal__title">📄 File Preview</h2>
+              <button 
+                className="modal__close"
+                onClick={() => setPreviewDialog(false)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal__body">
+              {selectedFile && (
+                <FilePreview file={selectedFile} />
+              )}
+            </div>
+            <div className="modal__footer">
+              <button 
+                className="button button--secondary"
+                onClick={() => setPreviewDialog(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </dialog>
+      )}
+    </div>
   );
 };
 
