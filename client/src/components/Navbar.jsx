@@ -16,6 +16,9 @@ export default function Navbar() {
           <Link to="/upload" className="header__link">
             Upload
           </Link>
+          <Link to="/about" className="header__link">
+            About
+          </Link>
         </div>
       </div>
     </header>
