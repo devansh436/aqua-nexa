@@ -123,9 +123,9 @@ const Home = () => {
         />
         
         <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
-          <Grid container spacing={{ xs: 4, md: 8 }} alignItems="center">
-            <Grid item xs={12} md={6}>
-              <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
+          <Grid container spacing={{ xs: 4, md: 8 }} alignItems="center" justifyContent="center">
+            <Grid item xs={12} md={8} lg={6}>
+              <Box sx={{ textAlign: 'center' }}>
                 {/* Badge */}
                 <Chip
                   label="🚀 AI-Powered Research Platform"
@@ -176,7 +176,8 @@ const Home = () => {
                     opacity: 0.9,
                     fontWeight: 400,
                     lineHeight: 1.6,
-                    maxWidth: { md: '90%' }
+                    maxWidth: { md: '90%' },
+                    mx: 'auto'
                   }}
                 >
                   Upload, analyze, and manage marine research data with AI-powered 
@@ -189,7 +190,8 @@ const Home = () => {
                     display: 'flex', 
                     gap: 3, 
                     flexDirection: { xs: 'column', sm: 'row' },
-                    alignItems: { xs: 'stretch', sm: 'center' }
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
                   <Button
@@ -246,70 +248,12 @@ const Home = () => {
                 </Box>
               </Box>
             </Grid>
-            
-            {/* Hero Dashboard */}
-            <Grid item xs={12} md={6}>
-              <Box
-                sx={{
-                  display: { xs: 'none', md: 'block' },
-                  position: 'relative'
-                }}
-              >
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 4,
-                    borderRadius: 4,
-                    bgcolor: 'rgba(255, 255, 255, 0.95)',
-                    backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)'
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
-                    <Avatar
-                      sx={{
-                        bgcolor: 'success.main',
-                        width: 56,
-                        height: 56,
-                        mr: 2
-                      }}
-                    >
-                      <TrendingUp />
-                    </Avatar>
-                    <Box>
-                      <Typography variant="h6" color="text.primary" fontWeight={600}>
-                        Live Analytics Dashboard
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Real-time data processing insights
-                      </Typography>
-                    </Box>
-                  </Box>
-                  
-                  <Grid container spacing={2}>
-                    {stats.map((stat, index) => (
-                      <Grid item xs={6} key={index}>
-                        <Box sx={{ textAlign: 'center', p: 2 }}>
-                          <Typography variant="h4" fontWeight={700} color="primary.main">
-                            {stat.icon} {stat.value}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {stat.label}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </Paper>
-              </Box>
-            </Grid>
           </Grid>
         </Container>
       </Box>
 
       {/* Features Section */}
-      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
+      <Container maxWidth="md" sx={{ py: { xs: 8, md: 12 } }}>
         <Box sx={{ textAlign: 'center', mb: 8 }}>
           <Typography
             variant="h2"
@@ -336,12 +280,14 @@ const Home = () => {
           </Typography>
         </Box>
 
-        <Grid container spacing={4}>
+        <Grid container spacing={3} justifyContent="center">
           {features.map((feature, index) => (
-            <Grid item xs={12} md={6} key={index}>
+            <Grid item xs={12} sm={10} md={8} key={index}>
               <Card
                 sx={{
-                  height: '100%',
+                  width: '100%',
+                  maxWidth: 500,
+                  mx: 'auto',
                   p: 2,
                   border: '1px solid',
                   borderColor: 'divider',
@@ -420,84 +366,103 @@ const Home = () => {
             </Typography>
           </Box>
 
-          <Grid container spacing={4}>
-            {dataTypes.map((type, index) => (
-              <Grid item xs={12} md={4} key={index}>
-                <Card
+          <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <Grid 
+              container 
+              spacing={4} 
+              sx={{ 
+                maxWidth: 900,
+                justifyContent: 'center'
+              }}
+            >
+              {dataTypes.map((type, index) => (
+                <Grid 
+                  item 
+                  xs={12} 
+                  sm={4} 
+                  key={index}
                   sx={{
-                    height: '100%',
-                    textAlign: 'center',
-                    p: 3,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    '&:hover': {
-                      transform: 'translateY(-6px)',
-                      boxShadow: '0 16px 32px rgba(0, 0, 0, 0.12)',
-                      '&::before': {
-                        opacity: 1
-                      }
-                    },
-                    '&::before': {
-                      content: '""',
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 4,
-                      background: type.gradient,
-                      opacity: 0,
-                      transition: 'opacity 0.3s ease'
-                    }
+                    display: 'flex',
+                    justifyContent: 'center'
                   }}
                 >
-                  <CardContent sx={{ p: 4 }}>
-                    <Avatar
-                      sx={{
+                  <Card
+                    sx={{
+                      width: '100%',
+                      maxWidth: 280,
+                      textAlign: 'center',
+                      p: 3,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&:hover': {
+                        transform: 'translateY(-6px)',
+                        boxShadow: '0 16px 32px rgba(0, 0, 0, 0.12)',
+                        '&::before': {
+                          opacity: 1
+                        }
+                      },
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: 4,
                         background: type.gradient,
-                        width: 80,
-                        height: 80,
-                        mx: 'auto',
-                        mb: 3,
-                        boxShadow: `0 8px 24px ${type.color}30`
-                      }}
-                    >
-                      {type.icon}
-                    </Avatar>
-                    
-                    <Typography 
-                      variant="h5" 
-                      fontWeight={700} 
-                      sx={{ mb: 2, color: 'text.primary' }}
-                    >
-                      {type.title}
-                    </Typography>
-                    
-                    <Typography
-                      variant="body1"
-                      color="text.secondary"
-                      sx={{ mb: 3, lineHeight: 1.6 }}
-                    >
-                      {type.description}
-                    </Typography>
-                    
-                    <Chip
-                      label={type.formats}
-                      sx={{
-                        fontWeight: 600,
-                        bgcolor: `${type.color}15`,
-                        color: type.color,
-                        borderRadius: 2,
-                        px: 1
-                      }}
-                    />
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+                        opacity: 0,
+                        transition: 'opacity 0.3s ease'
+                      }
+                    }}
+                  >
+                    <CardContent sx={{ p: 4 }}>
+                      <Avatar
+                        sx={{
+                          background: type.gradient,
+                          width: 80,
+                          height: 80,
+                          mx: 'auto',
+                          mb: 3,
+                          boxShadow: `0 8px 24px ${type.color}30`
+                        }}
+                      >
+                        {type.icon}
+                      </Avatar>
+                      
+                      <Typography 
+                        variant="h5" 
+                        fontWeight={700} 
+                        sx={{ mb: 2, color: 'text.primary' }}
+                      >
+                        {type.title}
+                      </Typography>
+                      
+                      <Typography
+                        variant="body1"
+                        color="text.secondary"
+                        sx={{ mb: 3, lineHeight: 1.6 }}
+                      >
+                        {type.description}
+                      </Typography>
+                      
+                      <Chip
+                        label={type.formats}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: `${type.color}15`,
+                          color: type.color,
+                          borderRadius: 2,
+                          px: 1
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
         </Container>
       </Box>
 

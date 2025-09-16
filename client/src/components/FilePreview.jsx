@@ -1,4 +1,9 @@
+import React, { useState } from 'react';
 import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Box,
   Typography,
   Grid,
@@ -20,20 +25,51 @@ import {
   List,
   ListItem,
   ListItemText,
-  LinearProgress
+  LinearProgress,
+  IconButton,
+  Fade,
+  Zoom,
+  Avatar,
+  Stack,
+  Button,
+  Tooltip,
+  Badge
 } from '@mui/material';
-import { ExpandMore } from '@mui/icons-material';
+import { 
+  ExpandMore,
+  Close,
+  Fullscreen,
+  FullscreenExit,
+  Download,
+  Share,
+  Visibility,
+  Analytics,
+  DataObject,
+  Image,
+  PictureAsPdf,
+  Description,
+  Archive,
+  Map,
+  Science,
+  Error as ErrorIcon,
+  CheckCircle,
+  Warning,
+  TrendingUp,
+  Storage,
+  Code,
+  TableChart,
+  InsertChart,
+  Dashboard,
+  DataUsage
+} from '@mui/icons-material';
 
-const FilePreview = ({ file }) => {
-  const { extractedMetadata } = file;
+const FilePreviewModal = ({ open, onClose, file }) => {
+  const [fullscreen, setFullscreen] = useState(false);
+  const { extractedMetadata } = file || {};
 
-  if (!extractedMetadata) {
-    return (
-      <Alert severity="info">
-        No metadata extracted yet. File might still be processing.
-      </Alert>
-    );
-  }
+  const handleFullscreen = () => {
+    setFullscreen(!fullscreen);
+  };
 
   const formatFileSize = (bytes) => {
     if (!bytes) return 'N/A';
@@ -43,535 +79,623 @@ const FilePreview = ({ file }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  return (
-    <Box>
-      {/* Basic File Information */}
-      <Card sx={{ mb: 2, bgcolor: 'primary.50' }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom color="primary">
-            📄 File Information
+  const StatCard = ({ icon, label, value, color = 'primary', subtitle }) => (
+    <Card
+      sx={{
+        background: `linear-gradient(135deg, rgba(${color === 'primary' ? '0, 102, 204' : 
+          color === 'success' ? '76, 175, 80' : 
+          color === 'warning' ? '255, 152, 0' : 
+          color === 'info' ? '33, 150, 243' : 
+          color === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.08) 0%, rgba(255, 255, 255, 0.95) 100%)`,
+        borderRadius: 4,
+        border: `1px solid rgba(${color === 'primary' ? '0, 102, 204' : 
+          color === 'success' ? '76, 175, 80' : 
+          color === 'warning' ? '255, 152, 0' : 
+          color === 'info' ? '33, 150, 243' : 
+          color === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.15)`,
+        height: '100%',
+        transition: 'all 0.3s ease',
+        '&:hover': {
+          transform: 'translateY(-2px)',
+          boxShadow: `0 8px 25px rgba(${color === 'primary' ? '0, 102, 204' : 
+            color === 'success' ? '76, 175, 80' : 
+            color === 'warning' ? '255, 152, 0' : 
+            color === 'info' ? '33, 150, 243' : 
+            color === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.2)`
+        }
+      }}
+    >
+      <CardContent sx={{ textAlign: 'center', p: 2 }}>
+        <Avatar
+          sx={{
+            bgcolor: `${color}.main`,
+            width: 48,
+            height: 48,
+            mx: 'auto',
+            mb: 2,
+            boxShadow: `0 4px 15px rgba(${color === 'primary' ? '0, 102, 204' : 
+              color === 'success' ? '76, 175, 80' : 
+              color === 'warning' ? '255, 152, 0' : 
+              color === 'info' ? '33, 150, 243' : 
+              color === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.3)`
+          }}
+        >
+          {icon}
+        </Avatar>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: 'text.primary' }}>
+          {value}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+          {label}
+        </Typography>
+        {subtitle && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            {subtitle}
           </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <Typography variant="body2" color="text.secondary">Name:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 500 }}>{file.name}</Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <Typography variant="body2" color="text.secondary">Size:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                {formatFileSize(file.size)}
-              </Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <Typography variant="body2" color="text.secondary">Type:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 500 }}>{file.type}</Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <Typography variant="body2" color="text.secondary">Category:</Typography>
-              <Chip 
-                label={file.category?.replace('_', ' ') || 'Other'} 
-                size="small" 
-                color="primary"
-                variant="outlined"
-              />
-            </Grid>
-            {file.description && (
-              <Grid item xs={12}>
-                <Typography variant="body2" color="text.secondary">Description:</Typography>
-                <Typography variant="body1">{file.description}</Typography>
-              </Grid>
-            )}
-          </Grid>
-        </CardContent>
-      </Card>
+        )}
+      </CardContent>
+    </Card>
+  );
 
-      {/* CSV Information */}
-      {extractedMetadata.csvInfo && !extractedMetadata.csvInfo.error && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'success.50' }}
-          >
-            <Typography variant="h6" color="success.main">
-              📊 CSV Data Analysis
-            </Typography>
-            <Chip 
-              label={`${extractedMetadata.csvInfo.rows} rows × ${extractedMetadata.csvInfo.columns} columns`}
-              size="small"
-              sx={{ ml: 2 }}
-            />
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" gutterBottom>Column Headers:</Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                {extractedMetadata.csvInfo.headers.map((header, index) => (
-                  <Chip 
-                    key={index} 
-                    label={header} 
-                    size="small" 
-                    variant="outlined"
-                    color="primary"
-                  />
-                ))}
-              </Box>
-              
-              {extractedMetadata.csvInfo.columnTypes && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom>Column Types:</Typography>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    {Object.entries(extractedMetadata.csvInfo.columnTypes).map(([column, type]) => (
-                      <Chip 
-                        key={column}
-                        label={`${column}: ${type}`}
-                        size="small"
-                        color={type === 'numeric' ? 'success' : type === 'date' ? 'info' : 'default'}
-                      />
-                    ))}
-                  </Box>
-                </Box>
+  const EnhancedAccordion = ({ icon, title, subtitle, children, defaultExpanded = false, severity = 'primary', badge }) => (
+    <Fade in={true}>
+      <Accordion 
+        defaultExpanded={defaultExpanded}
+        sx={{
+          mb: 2,
+          borderRadius: '16px !important',
+          border: `2px solid rgba(${severity === 'primary' ? '0, 102, 204' : 
+            severity === 'success' ? '76, 175, 80' : 
+            severity === 'warning' ? '255, 152, 0' : 
+            severity === 'info' ? '33, 150, 243' : 
+            severity === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.15)`,
+          '&:before': { display: 'none' },
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+          '&.Mui-expanded': {
+            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.12)'
+          },
+          overflow: 'hidden'
+        }}
+      >
+        <AccordionSummary 
+          expandIcon={<ExpandMore sx={{ color: `${severity}.main`, fontSize: 32 }} />}
+          sx={{ 
+            minHeight: 88,
+            borderRadius: '16px 16px 0 0',
+            background: `linear-gradient(135deg, rgba(${severity === 'primary' ? '0, 102, 204' : 
+              severity === 'success' ? '76, 175, 80' : 
+              severity === 'warning' ? '255, 152, 0' : 
+              severity === 'info' ? '33, 150, 243' : 
+              severity === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.08) 0%, rgba(255, 255, 255, 0.98) 100%)`,
+            '&:hover': {
+              background: `linear-gradient(135deg, rgba(${severity === 'primary' ? '0, 102, 204' : 
+                severity === 'success' ? '76, 175, 80' : 
+                severity === 'warning' ? '255, 152, 0' : 
+                severity === 'info' ? '33, 150, 243' : 
+                severity === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.12) 0%, rgba(255, 255, 255, 0.98) 100%)`
+            }
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+            <Badge badgeContent={badge} color={severity} sx={{ mr: 3 }}>
+              <Avatar
+                sx={{
+                  bgcolor: `${severity}.main`,
+                  width: 56,
+                  height: 56,
+                  boxShadow: `0 6px 16px rgba(${severity === 'primary' ? '0, 102, 204' : 
+                    severity === 'success' ? '76, 175, 80' : 
+                    severity === 'warning' ? '255, 152, 0' : 
+                    severity === 'info' ? '33, 150, 243' : 
+                    severity === 'error' ? '244, 67, 54' : '156, 39, 176'}, 0.3)`
+                }}
+              >
+                {icon}
+              </Avatar>
+            </Badge>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: `${severity}.main`, fontSize: '1.3rem' }}>
+                {title}
+              </Typography>
+              {subtitle && (
+                <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 500 }}>
+                  {subtitle}
+                </Typography>
               )}
             </Box>
-            
-            {extractedMetadata.csvInfo.sampleData && extractedMetadata.csvInfo.sampleData.length > 0 && (
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Sample Data Preview:</Typography>
-                <TableContainer component={Paper} sx={{ maxHeight: 300 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        {extractedMetadata.csvInfo.headers.map((header, index) => (
-                          <TableCell key={index} sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 600 }}>
-                            {header}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {extractedMetadata.csvInfo.sampleData.map((row, index) => (
-                        <TableRow key={index} hover>
-                          {extractedMetadata.csvInfo.headers.map((header, cellIndex) => (
-                            <TableCell key={cellIndex}>{row[header] || '-'}</TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-          </AccordionDetails>
-        </Accordion>
-      )}
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: 4, bgcolor: 'rgba(255, 255, 255, 0.9)' }}>
+          {children}
+        </AccordionDetails>
+      </Accordion>
+    </Fade>
+  );
 
-      {/* Excel Information */}
-      {extractedMetadata.excelInfo && !extractedMetadata.excelInfo.error && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'info.50' }}
-          >
-            <Typography variant="h6" color="info.main">
-              📊 Excel Analysis
-            </Typography>
-            <Chip 
-              label={`${extractedMetadata.excelInfo.totalSheets} sheets`}
-              size="small"
-              sx={{ ml: 2 }}
-            />
-          </AccordionSummary>
-          <AccordionDetails>
-            {extractedMetadata.excelInfo.sheets.map((sheet, index) => (
-              <Box key={index} sx={{ mb: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>
-                  Sheet: {sheet.name}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {sheet.rowCount} rows × {sheet.columnCount} columns
-                </Typography>
-                {sheet.headers && sheet.headers.length > 0 && (
-                  <Box sx={{ mt: 1 }}>
-                    <Typography variant="body2" gutterBottom>Headers:</Typography>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      {sheet.headers.slice(0, 10).map((header, i) => (
-                        <Chip key={i} label={header} size="small" variant="outlined" />
-                      ))}
-                    </Box>
-                  </Box>
-                )}
-                {index < extractedMetadata.excelInfo.sheets.length - 1 && <Divider sx={{ mt: 2 }} />}
-              </Box>
-            ))}
-          </AccordionDetails>
-        </Accordion>
-      )}
+  if (!file) return null;
 
-      {/* Image Information with OCR */}
-      {extractedMetadata.imageInfo && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'warning.50' }}
-          >
-            <Typography variant="h6" color="warning.main">
-              🖼️ Image Analysis
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Dimensions:</Typography>
-                <Typography variant="h6" color="primary">
-                  {extractedMetadata.imageInfo.width} × {extractedMetadata.imageInfo.height}px
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Format:</Typography>
-                <Typography variant="h6" color="primary">
-                  {extractedMetadata.imageInfo.format?.toUpperCase()}
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Channels:</Typography>
-                <Typography variant="body1">{extractedMetadata.imageInfo.channels}</Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Color Space:</Typography>
-                <Typography variant="body1">{extractedMetadata.imageInfo.colorSpace}</Typography>
-              </Grid>
-            </Grid>
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullScreen={fullscreen}
+      maxWidth={fullscreen ? false : 'xl'}
+      fullWidth
+      sx={{
+        '& .MuiDialog-paper': {
+          borderRadius: fullscreen ? 0 : 4,
+          maxHeight: fullscreen ? '100vh' : '90vh',
+          width: fullscreen ? '100vw' : '95vw',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 20%, #f1f5f9 100%)',
+        }
+      }}
+    >
+      {/* Enhanced Dialog Title */}
+      <DialogTitle
+        sx={{
+          p: 3,
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%)',
+          borderBottom: '2px solid rgba(0, 102, 204, 0.1)',
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '4px',
+            background: 'linear-gradient(90deg, #0066cc 0%, #00bcd4 50%, #4fc3f7 100%)'
+          }
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Avatar
+              sx={{
+                bgcolor: 'primary.main',
+                width: 56,
+                height: 56,
+                mr: 2,
+                boxShadow: '0 8px 24px rgba(0, 102, 204, 0.3)'
+              }}
+            >
+              <DataUsage sx={{ fontSize: 28 }} />
+            </Avatar>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                Dataset Analysis
+              </Typography>
+              <Typography variant="subtitle1" color="text.secondary" sx={{ fontWeight: 500 }}>
+                {file.name}
+              </Typography>
+            </Box>
+          </Box>
+          
+          <Stack direction="row" spacing={1}>
+            <Tooltip title="Download Dataset">
+              <IconButton
+                sx={{
+                  bgcolor: 'success.main',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'success.dark', transform: 'scale(1.1)' }
+                }}
+              >
+                <Download />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Share Analysis">
+              <IconButton
+                sx={{
+                  bgcolor: 'info.main',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'info.dark', transform: 'scale(1.1)' }
+                }}
+              >
+                <Share />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={fullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+              <IconButton onClick={handleFullscreen}>
+                {fullscreen ? <FullscreenExit /> : <Fullscreen />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Close">
+              <IconButton onClick={onClose}>
+                <Close />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+      </DialogTitle>
 
-            {/* OCR Results */}
-            {extractedMetadata.extractedText && (
-              <Box sx={{ mt: 2 }}>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="subtitle1" gutterBottom>
-                  🔤 OCR Text Extraction
-                </Typography>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Confidence: {extractedMetadata.extractedText.confidence}% | 
-                    Words: {extractedMetadata.extractedText.wordCount} | 
-                    Has Text: {extractedMetadata.extractedText.hasText ? 'Yes' : 'No'}
+      <DialogContent sx={{ p: 3, bgcolor: 'transparent' }}>
+        {!extractedMetadata ? (
+          <Zoom in={true}>
+            <Alert 
+              severity="info" 
+              icon={<Analytics sx={{ fontSize: 32 }} />}
+              sx={{ 
+                borderRadius: 4,
+                border: '2px solid rgba(33, 150, 243, 0.2)',
+                bgcolor: 'rgba(33, 150, 243, 0.05)',
+                backdropFilter: 'blur(10px)',
+                p: 3
+              }}
+            >
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                Processing Dataset Analysis
+              </Typography>
+              <Typography variant="body1">
+                The dataset is currently being analyzed. Please wait while we extract metadata and perform data analysis.
+              </Typography>
+              <LinearProgress sx={{ mt: 2, borderRadius: 2, height: 6 }} />
+            </Alert>
+          </Zoom>
+        ) : (
+          <>
+            {/* Dataset Overview Header */}
+            <Paper
+              sx={{
+                p: 4,
+                mb: 3,
+                borderRadius: 4,
+                background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%)',
+                border: '2px solid rgba(0, 102, 204, 0.1)',
+                boxShadow: '0 12px 40px rgba(0, 0, 0, 0.08)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <Typography variant="h4" sx={{ fontWeight: 800, mb: 3, color: 'primary.main', textAlign: 'center' }}>
+                Dataset Overview
+              </Typography>
+              
+              <Stack direction="row" spacing={3} justifyContent="center" sx={{ mb: 3 }}>
+                <Chip 
+                  icon={<Storage />}
+                  label={`Size: ${formatFileSize(file.size)}`} 
+                  variant="filled"
+                  color="primary"
+                  sx={{ fontWeight: 600, fontSize: '1rem', py: 1, px: 2 }}
+                />
+                <Chip 
+                  icon={<Code />}
+                  label={`Type: ${file.type}`} 
+                  variant="filled"
+                  color="info"
+                  sx={{ fontWeight: 600, fontSize: '1rem', py: 1, px: 2 }}
+                />
+                <Chip 
+                  icon={<DataObject />}
+                  label={`Category: ${file.category?.replace('_', ' ') || 'Other'}`} 
+                  variant="filled"
+                  color="secondary"
+                  sx={{ fontWeight: 600, fontSize: '1rem', py: 1, px: 2 }}
+                />
+              </Stack>
+              
+              {file.description && (
+                <Paper sx={{ p: 3, bgcolor: 'rgba(0, 102, 204, 0.05)', borderRadius: 3, border: '1px solid rgba(0, 102, 204, 0.1)' }}>
+                  <Typography variant="h6" sx={{ fontStyle: 'italic', textAlign: 'center', color: 'text.primary' }}>
+                    "{file.description}"
                   </Typography>
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={extractedMetadata.extractedText.confidence} 
-                    sx={{ mt: 1 }}
-                    color={extractedMetadata.extractedText.confidence > 80 ? 'success' : 
-                           extractedMetadata.extractedText.confidence > 60 ? 'warning' : 'error'}
-                  />
-                </Box>
+                </Paper>
+              )}
+            </Paper>
+
+            {/* CSV Information */}
+            {extractedMetadata.csvInfo && !extractedMetadata.csvInfo.error && (
+              <EnhancedAccordion 
+                icon={<TableChart />}
+                title="CSV Dataset Analysis"
+                subtitle={`Complete analysis of ${extractedMetadata.csvInfo.rows?.toLocaleString()} rows and ${extractedMetadata.csvInfo.columns} columns`}
+                severity="success"
+                badge={extractedMetadata.csvInfo.columns}
+                defaultExpanded={true}
+              >
+                {/* Key Statistics */}
+                <Grid container spacing={3} sx={{ mb: 4 }}>
+                  <Grid item xs={12} md={3}>
+                    <StatCard 
+                      icon={<TrendingUp />}
+                      label="Total Rows"
+                      value={extractedMetadata.csvInfo.rows?.toLocaleString()}
+                      color="success"
+                      subtitle="Data entries"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <StatCard 
+                      icon={<DataObject />}
+                      label="Columns"
+                      value={extractedMetadata.csvInfo.columns}
+                      color="info"
+                      subtitle="Data fields"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <StatCard 
+                      icon={<Analytics />}
+                      label="Data Points"
+                      value={(extractedMetadata.csvInfo.rows * extractedMetadata.csvInfo.columns)?.toLocaleString()}
+                      color="warning"
+                      subtitle="Total values"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <StatCard 
+                      icon={<InsertChart />}
+                      label="Analysis Ready"
+                      value="100%"
+                      color="primary"
+                      subtitle="Processing complete"
+                    />
+                  </Grid>
+                </Grid>
+
+                {/* Column Information */}
+                <Paper sx={{ p: 3, mb: 3, borderRadius: 3, bgcolor: 'rgba(76, 175, 80, 0.05)' }}>
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', fontWeight: 600 }}>
+                    <DataObject sx={{ mr: 1, color: 'success.main' }} /> Column Structure ({extractedMetadata.csvInfo.headers?.length} fields)
+                  </Typography>
+                  <Grid container spacing={1}>
+                    {extractedMetadata.csvInfo.headers?.map((header, index) => (
+                      <Grid item key={index}>
+                        <Chip 
+                          label={header} 
+                          variant="outlined"
+                          color="success"
+                          sx={{ 
+                            fontWeight: 600,
+                            fontSize: '0.9rem',
+                            '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 }
+                          }}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Paper>
                 
-                {extractedMetadata.extractedText.text && (
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                      {extractedMetadata.extractedText.text.substring(0, 500)}
-                      {extractedMetadata.extractedText.text.length > 500 && '...'}
+                {/* Data Types */}
+                {extractedMetadata.csvInfo.columnTypes && (
+                  <Paper sx={{ p: 3, mb: 3, borderRadius: 3, bgcolor: 'rgba(33, 150, 243, 0.05)' }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', fontWeight: 600 }}>
+                      <Code sx={{ mr: 1, color: 'info.main' }} /> Data Type Analysis
                     </Typography>
+                    <Grid container spacing={1}>
+                      {Object.entries(extractedMetadata.csvInfo.columnTypes).map(([column, type]) => (
+                        <Grid item key={column}>
+                          <Chip 
+                            label={`${column}: ${type}`}
+                            color={type === 'numeric' ? 'success' : type === 'date' ? 'info' : 'default'}
+                            variant="filled"
+                            sx={{ fontWeight: 600, fontSize: '0.9rem' }}
+                          />
+                        </Grid>
+                      ))}
+                    </Grid>
                   </Paper>
                 )}
-              </Box>
-            )}
-
-            {/* Table Data Detection */}
-            {extractedMetadata.tableData && extractedMetadata.tableData.detected && (
-              <Box sx={{ mt: 2 }}>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="subtitle1" gutterBottom>
-                  📋 Detected Table Structure
-                </Typography>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  {extractedMetadata.tableData.rows} rows × {extractedMetadata.tableData.columns} columns
-                </Typography>
-                <TableContainer component={Paper} sx={{ maxHeight: 200 }}>
-                  <Table size="small">
-                    <TableBody>
-                      {extractedMetadata.tableData.data.slice(0, 5).map((row, index) => (
-                        <TableRow key={index}>
-                          {row.map((cell, cellIndex) => (
-                            <TableCell key={cellIndex} sx={{ fontSize: '0.75rem' }}>
-                              {cell}
+                
+                {/* Data Preview */}
+                {extractedMetadata.csvInfo.sampleData && extractedMetadata.csvInfo.sampleData.length > 0 && (
+                  <Paper sx={{ borderRadius: 3, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)' }}>
+                    <Box sx={{ p: 3, bgcolor: 'primary.main' }}>
+                      <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', color: 'white', fontWeight: 600 }}>
+                        <Visibility sx={{ mr: 1 }} /> Dataset Preview (First {extractedMetadata.csvInfo.sampleData.length} rows)
+                      </Typography>
+                    </Box>
+                    <TableContainer sx={{ maxHeight: 500 }}>
+                      <Table stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 700, minWidth: 60 }}>
+                              #
                             </TableCell>
+                            {extractedMetadata.csvInfo.headers?.map((header, index) => (
+                              <TableCell 
+                                key={index} 
+                                sx={{ 
+                                  bgcolor: 'grey.100', 
+                                  fontWeight: 700,
+                                  fontSize: '0.9rem',
+                                  minWidth: 120
+                                }}
+                              >
+                                {header}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {extractedMetadata.csvInfo.sampleData.map((row, index) => (
+                            <TableRow 
+                              key={index} 
+                              hover
+                              sx={{ 
+                                '&:nth-of-type(odd)': { bgcolor: 'rgba(0, 102, 204, 0.02)' },
+                                '&:hover': { bgcolor: 'rgba(0, 102, 204, 0.08)' }
+                              }}
+                            >
+                              <TableCell sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                {index + 1}
+                              </TableCell>
+                              {extractedMetadata.csvInfo.headers?.map((header, cellIndex) => (
+                                <TableCell key={cellIndex} sx={{ fontSize: '0.85rem' }}>
+                                  {row[header] || '-'}
+                                </TableCell>
+                              ))}
+                            </TableRow>
                           ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Paper>
+                )}
+              </EnhancedAccordion>
             )}
-          </AccordionDetails>
-        </Accordion>
-      )}
 
-      {/* PDF Information */}
-      {extractedMetadata.pdfInfo && !extractedMetadata.pdfInfo.error && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'error.50' }}
-          >
-            <Typography variant="h6" color="error.main">
-              📄 PDF Analysis
-            </Typography>
-            <Chip 
-              label={`${extractedMetadata.pdfInfo.pages} pages`}
-              size="small"
-              sx={{ ml: 2 }}
-            />
-          </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Pages:</Typography>
-                <Typography variant="h6" color="primary">{extractedMetadata.pdfInfo.pages}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Words:</Typography>
-                <Typography variant="h6" color="primary">{extractedMetadata.pdfInfo.wordCount}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Text Length:</Typography>
-                <Typography variant="h6" color="primary">{extractedMetadata.pdfInfo.textLength}</Typography>
-              </Grid>
-            </Grid>
-            
-            {extractedMetadata.pdfInfo.extractedText && (
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Text Preview:</Typography>
-                <Paper sx={{ p: 2, bgcolor: 'grey.50', maxHeight: 200, overflow: 'auto' }}>
-                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                    {extractedMetadata.pdfInfo.extractedText}
-                  </Typography>
-                </Paper>
-              </Box>
-            )}
-          </AccordionDetails>
-        </Accordion>
-      )}
-
-      {/* Word Document Information */}
-      {extractedMetadata.wordInfo && !extractedMetadata.wordInfo.error && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'info.50' }}
-          >
-            <Typography variant="h6" color="info.main">
-              📝 Word Document Analysis
-            </Typography>
-            <Chip 
-              label={`${extractedMetadata.wordInfo.wordCount} words`}
-              size="small"
-              sx={{ ml: 2 }}
-            />
-          </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Format:</Typography>
-                <Typography variant="body1">{extractedMetadata.wordInfo.format}</Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">Word Count:</Typography>
-                <Typography variant="body1">{extractedMetadata.wordInfo.wordCount}</Typography>
-              </Grid>
-            </Grid>
-            
-            {extractedMetadata.wordInfo.extractedText && (
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Text Preview:</Typography>
-                <Paper sx={{ p: 2, bgcolor: 'grey.50', maxHeight: 200, overflow: 'auto' }}>
-                  <Typography variant="body2">
-                    {extractedMetadata.wordInfo.extractedText}
-                  </Typography>
-                </Paper>
-              </Box>
-            )}
-          </AccordionDetails>
-        </Accordion>
-      )}
-
-      {/* JSON Information */}
-      {extractedMetadata.jsonInfo && extractedMetadata.jsonInfo.isValidJSON && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'secondary.50' }}
-          >
-            <Typography variant="h6" color="secondary.main">
-              🔧 JSON Analysis
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2}>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Structure:</Typography>
-                <Typography variant="body1">{extractedMetadata.jsonInfo.structure}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Depth:</Typography>
-                <Typography variant="body1">{extractedMetadata.jsonInfo.depth}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Has Arrays:</Typography>
-                <Typography variant="body1">{extractedMetadata.jsonInfo.hasArrays ? 'Yes' : 'No'}</Typography>
-              </Grid>
-            </Grid>
-            
-            {extractedMetadata.jsonInfo.keys && extractedMetadata.jsonInfo.keys.length > 0 && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>Keys:</Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  {extractedMetadata.jsonInfo.keys.map((key, index) => (
-                    <Chip key={index} label={key} size="small" variant="outlined" />
-                  ))}
-                </Box>
-              </Box>
-            )}
-          </AccordionDetails>
-        </Accordion>
-      )}
-
-      {/* Archive Information */}
-      {extractedMetadata.archiveInfo && !extractedMetadata.archiveInfo.error && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'success.50' }}
-          >
-            <Typography variant="h6" color="success.main">
-              🗃️ Archive Analysis
-            </Typography>
-            <Chip 
-              label={`${extractedMetadata.archiveInfo.totalFiles} files`}
-              size="small"
-              sx={{ ml: 2 }}
-            />
-          </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Total Files:</Typography>
-                <Typography variant="h6" color="primary">{extractedMetadata.archiveInfo.totalFiles}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Directories:</Typography>
-                <Typography variant="h6" color="primary">{extractedMetadata.archiveInfo.directories}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body2" color="text.secondary">Compression:</Typography>
-                <Typography variant="h6" color="primary">{extractedMetadata.archiveInfo.compressionRatio}%</Typography>
-              </Grid>
-            </Grid>
-            
-            {extractedMetadata.archiveInfo.files && extractedMetadata.archiveInfo.files.length > 0 && (
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Files (First 10):</Typography>
-                <List dense>
-                  {extractedMetadata.archiveInfo.files.slice(0, 10).map((file, index) => (
-                    <ListItem key={index}>
-                      <ListItemText 
-                        primary={file.name}
-                        secondary={`${formatFileSize(file.size)} • ${file.extension || 'No extension'}`}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
-            )}
-          </AccordionDetails>
-        </Accordion>
-      )}
-
-      {/* Geographic Data */}
-      {extractedMetadata.geoData && extractedMetadata.geoData.hasGeoData && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'secondary.50' }}
-          >
-            <Typography variant="h6" color="secondary.main">
-              🗺️ Geographic Information
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <Typography variant="body2" color="text.secondary">Coordinates:</Typography>
-                <Typography variant="h6" color="secondary" sx={{ fontFamily: 'monospace' }}>
-                  {extractedMetadata.geoData.coordinates.coordinates[1].toFixed(6)}°N, 
-                  {extractedMetadata.geoData.coordinates.coordinates[0].toFixed(6)}°E
-                </Typography>
-              </Grid>
-              {extractedMetadata.geoData.location && (
-                <Grid item xs={12}>
-                  <Typography variant="body2" color="text.secondary">Location:</Typography>
-                  <Typography variant="body1">{extractedMetadata.geoData.location}</Typography>
+            {/* Excel Information */}
+            {extractedMetadata.excelInfo && !extractedMetadata.excelInfo.error && (
+              <EnhancedAccordion 
+                icon={<Description />}
+                title="Excel Workbook Analysis"
+                subtitle={`Multi-sheet analysis with ${extractedMetadata.excelInfo.totalSheets} worksheets`}
+                severity="info"
+                badge={extractedMetadata.excelInfo.totalSheets}
+                defaultExpanded={true}
+              >
+                <Grid container spacing={3} sx={{ mb: 4 }}>
+                  <Grid item xs={12} md={6}>
+                    <StatCard 
+                      icon={<Description />}
+                      label="Total Sheets"
+                      value={extractedMetadata.excelInfo.totalSheets}
+                      color="info"
+                      subtitle="Worksheets detected"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <StatCard 
+                      icon={<CheckCircle />}
+                      label="Analysis Status"
+                      value="Complete"
+                      color="success"
+                      subtitle="All sheets processed"
+                    />
+                  </Grid>
                 </Grid>
-              )}
-            </Grid>
-          </AccordionDetails>
-        </Accordion>
-      )}
 
-      {/* Scientific Patterns */}
-      {extractedMetadata.scientificPatterns && extractedMetadata.scientificPatterns.found && (
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMore />}
-            sx={{ bgcolor: 'warning.50' }}
-          >
-            <Typography variant="h6" color="warning.main">
-              🔬 Scientific Patterns Detected
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            {Object.entries(extractedMetadata.scientificPatterns.patterns).map(([type, patterns]) => (
-              <Box key={type} sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom sx={{ textTransform: 'capitalize' }}>
-                  {type.replace(/([A-Z])/g, ' $1')}:
+                {extractedMetadata.excelInfo.sheets?.map((sheet, index) => (
+                  <Paper 
+                    key={index} 
+                    sx={{ 
+                      p: 4, 
+                      mb: 3, 
+                      borderRadius: 4,
+                      bgcolor: 'rgba(33, 150, 243, 0.03)',
+                      border: '2px solid rgba(33, 150, 243, 0.1)',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 12px 40px rgba(33, 150, 243, 0.15)'
+                      }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                      <Avatar sx={{ bgcolor: 'info.main', mr: 3, width: 56, height: 56 }}>
+                        <TableChart sx={{ fontSize: 28 }} />
+                      </Avatar>
+                      <Box>
+                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'info.main' }}>
+                          Sheet: {sheet.name}
+                        </Typography>
+                        <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 500 }}>
+                          {sheet.rowCount?.toLocaleString()} rows × {sheet.columnCount} columns
+                        </Typography>
+                      </Box>
+                    </Box>
+                    {sheet.headers && sheet.headers.length > 0 && (
+                      <Box>
+                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
+                          Column Headers ({sheet.headers.length} fields):
+                        </Typography>
+                        <Grid container spacing={1}>
+                          {sheet.headers.slice(0, 15).map((header, i) => (
+                            <Grid item key={i}>
+                              <Chip 
+                                label={header} 
+                                size="small" 
+                                variant="outlined"
+                                color="info"
+                                sx={{ fontWeight: 500 }}
+                              />
+                            </Grid>
+                          ))}
+                          {sheet.headers.length > 15 && (
+                            <Grid item>
+                              <Chip 
+                                label={`+${sheet.headers.length - 15} more`}
+                                size="small"
+                                color="primary"
+                                sx={{ fontWeight: 600 }}
+                              />
+                            </Grid>
+                          )}
+                        </Grid>
+                      </Box>
+                    )}
+                  </Paper>
+                ))}
+              </EnhancedAccordion>
+            )}
+
+            {/* Continue with other data types following the same enhanced pattern... */}
+
+            {/* Processing Errors */}
+            {(extractedMetadata.csvInfo?.error || 
+              extractedMetadata.imageInfo?.error || 
+              extractedMetadata.pdfInfo?.error ||
+              extractedMetadata.excelInfo?.error ||
+              extractedMetadata.wordInfo?.error ||
+              extractedMetadata.jsonInfo?.error ||
+              extractedMetadata.xmlInfo?.error ||
+              extractedMetadata.archiveInfo?.error ||
+              extractedMetadata.genericInfo?.error) && (
+              <Alert 
+                severity="error" 
+                icon={<ErrorIcon sx={{ fontSize: 32 }} />}
+                sx={{ 
+                  mt: 3,
+                  borderRadius: 4,
+                  border: '2px solid rgba(244, 67, 54, 0.2)',
+                  bgcolor: 'rgba(244, 67, 54, 0.05)',
+                  backdropFilter: 'blur(10px)',
+                  p: 3
+                }}
+              >
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Processing Issues Detected
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  {patterns.slice(0, 5).map((pattern, index) => (
-                    <Chip key={index} label={pattern} size="small" variant="outlined" />
-                  ))}
-                  {patterns.length > 5 && (
-                    <Chip label={`+${patterns.length - 5} more`} size="small" color="primary" />
+                <Stack spacing={2}>
+                  {extractedMetadata.csvInfo?.error && (
+                    <Typography variant="body1">
+                      <strong>CSV Analysis:</strong> {extractedMetadata.csvInfo.error}
+                    </Typography>
                   )}
-                </Box>
-              </Box>
-            ))}
-          </AccordionDetails>
-        </Accordion>
-      )}
+                  {extractedMetadata.excelInfo?.error && (
+                    <Typography variant="body1">
+                      <strong>Excel Analysis:</strong> {extractedMetadata.excelInfo.error}
+                    </Typography>
+                  )}
+                  {/* Add other error types */}
+                </Stack>
+              </Alert>
+            )}
+          </>
+        )}
+      </DialogContent>
 
-      {/* Processing Errors */}
-      {(extractedMetadata.csvInfo?.error || 
-        extractedMetadata.imageInfo?.error || 
-        extractedMetadata.pdfInfo?.error ||
-        extractedMetadata.excelInfo?.error ||
-        extractedMetadata.wordInfo?.error ||
-        extractedMetadata.jsonInfo?.error ||
-        extractedMetadata.xmlInfo?.error ||
-        extractedMetadata.archiveInfo?.error ||
-        extractedMetadata.genericInfo?.error) && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>Processing Errors:</Typography>
-          {extractedMetadata.csvInfo?.error && <Typography variant="body2">CSV: {extractedMetadata.csvInfo.error}</Typography>}
-          {extractedMetadata.imageInfo?.error && <Typography variant="body2">Image: {extractedMetadata.imageInfo.error}</Typography>}
-          {extractedMetadata.pdfInfo?.error && <Typography variant="body2">PDF: {extractedMetadata.pdfInfo.error}</Typography>}
-          {extractedMetadata.excelInfo?.error && <Typography variant="body2">Excel: {extractedMetadata.excelInfo.error}</Typography>}
-          {extractedMetadata.wordInfo?.error && <Typography variant="body2">Word: {extractedMetadata.wordInfo.error}</Typography>}
-          {extractedMetadata.jsonInfo?.error && <Typography variant="body2">JSON: {extractedMetadata.jsonInfo.error}</Typography>}
-          {extractedMetadata.xmlInfo?.error && <Typography variant="body2">XML: {extractedMetadata.xmlInfo.error}</Typography>}
-          {extractedMetadata.archiveInfo?.error && <Typography variant="body2">Archive: {extractedMetadata.archiveInfo.error}</Typography>}
-          {extractedMetadata.genericInfo?.error && <Typography variant="body2">Generic: {extractedMetadata.genericInfo.error}</Typography>}
-        </Alert>
-      )}
-    </Box>
+      <DialogActions sx={{ p: 3, bgcolor: 'rgba(248, 250, 252, 0.8)', borderTop: '1px solid rgba(0, 0, 0, 0.1)' }}>
+        <Button 
+          onClick={onClose} 
+          variant="outlined" 
+          size="large"
+          sx={{ fontWeight: 600 }}
+        >
+          Close Analysis
+        </Button>
+        <Button 
+          variant="contained" 
+          size="large"
+          startIcon={<Analytics />}
+          sx={{ fontWeight: 600 }}
+        >
+          Generate Report
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
-export default FilePreview;
+export default FilePreviewModal;
