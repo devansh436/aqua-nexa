@@ -16,7 +16,7 @@ const upload = multer({
       type: file.mimetype,
       size: file.size
     });
-    
+
     // ✅ ALL supported extensions
     const allowedExtensions = [
       // Images
@@ -32,7 +32,7 @@ const upload = multer({
       // Scientific
       '.nc', '.nc4', '.h5', '.hdf5', '.mat'
     ];
-    
+
     const allowedMimeTypes = [
       // Images
       'image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/tiff', 'image/webp',
@@ -52,9 +52,8 @@ const upload = multer({
       // Scientific
       'application/x-netcdf', 'application/octet-stream'
     ];
-    
+
     const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf('.'));
-    
     if (allowedExtensions.includes(ext) || allowedMimeTypes.includes(file.mimetype)) {
       console.log('✅ File accepted:', ext, file.mimetype);
       cb(null, true);
@@ -65,13 +64,27 @@ const upload = multer({
   }
 });
 
-// Routes
+// ✅ MAIN ROUTES
 router.post('/', upload.single('file'), uploadController.uploadFile);
 router.get('/status/:fileId', uploadController.getFileStatus);
+router.get('/files', uploadController.getAllFiles);
+
+// ✅ NEW: File data and download routes
+router.get('/data/:fileId', uploadController.getFileData);
+router.get('/download/:fileId', uploadController.downloadFile);
 router.get('/metadata/:fileId', uploadController.getFileMetadata);
 router.get('/search', uploadController.searchFiles);
 
-// Error handling
+// ✅ Health check route for uploads
+router.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Upload service is healthy',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Error handling middleware
 router.use((error, req, res, next) => {
   console.error('❌ Upload error:', error.message);
   

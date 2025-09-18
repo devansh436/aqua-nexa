@@ -30,50 +30,127 @@ api.interceptors.response.use(
   },
   (error) => {
     console.error(`❌ API Error: ${error.response?.status} ${error.response?.data?.message || error.message}`);
-    
     if (error.response) {
       throw new Error(error.response.data.message || 'Server error');
     } else if (error.request) {
       throw new Error('Network error - please check your connection');
     } else {
-      throw new Error(error.message || 'Request failed');
+      throw new Error('Request setup error');
     }
   }
 );
 
-// Upload API functions
-export const uploadFile = (file, metadata = {}) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  Object.keys(metadata).forEach(key => {
-    if (metadata[key] !== undefined && metadata[key] !== '') {
-      formData.append(key, metadata[key]);
-    }
-  });
+// ✅ Upload file with proper FormData handling
+export const uploadFile = async (file, metadata = {}) => {
+  try {
+    console.log('📤 Starting file upload:', file.name);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('category', metadata.category || 'other');
+    formData.append('description', metadata.description || '');
+    formData.append('tags', metadata.tags || '');
 
-  return api.post('/upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    }
-  });
+    const response = await api.post('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 300000, // 5 minutes for large files
+      onUploadProgress: (progressEvent) => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        console.log(`📊 Upload progress: ${percentCompleted}%`);
+      }
+    });
+
+    console.log('✅ Upload successful:', response);
+    return response;
+  } catch (error) {
+    console.error('❌ Upload failed:', error);
+    throw error;
+  }
 };
 
-export const getFileStatus = (fileId) => {
-  return api.get(`/upload/status/${fileId}`);
+// ✅ NEW: Get actual file data
+export const getFileData = async (fileId) => {
+  try {
+    console.log('📖 Getting file data for:', fileId);
+    const response = await api.get(`/upload/data/${fileId}`);
+    return response;
+  } catch (error) {
+    console.error('❌ Get file data failed:', error);
+    throw error;
+  }
 };
 
-export const getFileMetadata = (fileId) => {
-  return api.get(`/upload/metadata/${fileId}`);
+// ✅ NEW: Download file
+export const downloadFile = async (fileId, fileName) => {
+  try {
+    console.log('📥 Downloading file:', fileId);
+    const response = await axios.get(`${API_BASE_URL}/upload/download/${fileId}`, {
+      responseType: 'blob'
+    });
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return response;
+  } catch (error) {
+    console.error('❌ Download failed:', error);
+    throw error;
+  }
 };
 
-export const searchFiles = (params) => {
-  return api.get('/upload/search', { params });
+// ✅ Get file status
+export const getFileStatus = async (fileId) => {
+  try {
+    console.log('🔍 Getting file status:', fileId);
+    const response = await api.get(`/upload/status/${fileId}`);
+    return response;
+  } catch (error) {
+    console.error('❌ Get file status failed:', error);
+    throw error;
+  }
 };
 
-// ✅ Direct health check
-export const checkHealth = () => {
-  return axios.get('http://localhost:5000/health');
+// ✅ Health check
+export const checkHealth = async () => {
+  try {
+    const response = await axios.get('http://localhost:5000/health', { timeout: 5000 });
+    console.log('✅ Health check passed:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Health check failed:', error.message);
+    throw error;
+  }
+};
+
+// ✅ Get all files
+export const getAllFiles = async () => {
+  try {
+    const response = await api.get('/upload/files');
+    return response;
+  } catch (error) {
+    console.error('❌ Get all files failed:', error);
+    throw error;
+  }
+};
+
+// ✅ Search files
+export const searchFiles = async (params = {}) => {
+  try {
+    const response = await api.get('/upload/search', { params });
+    return response;
+  } catch (error) {
+    console.error('❌ Search files failed:', error);
+    throw error;
+  }
 };
 
 export default api;

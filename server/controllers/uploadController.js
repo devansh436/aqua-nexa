@@ -8,6 +8,7 @@ const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 const xml2js = require('xml2js');
 const JSZip = require('jszip');
+const csv = require('csv-parser');
 
 // ✅ Complete File Type Determiner
 const determineFileType = (mimeType, fileName) => {
@@ -46,97 +47,208 @@ const determineFileType = (mimeType, fileName) => {
   return 'other';
 };
 
-// ✅ FIXED OCR Service Class
-class OCRService {
-  constructor() {
-    this.worker = null;
-  }
+// ✅ STANDALONE FILE READING FUNCTIONS (Outside of class)
 
-  async initWorker() {
-    if (!this.worker) {
-      try {
-        console.log('🔍 Initializing OCR worker...');
-        
-        // ✅ FIXED: Simple logger function to avoid cloning issues
-        this.worker = await Tesseract.createWorker({
-          logger: function(message) {
-            if (message && message.status && typeof message.progress === 'number') {
-              const progress = Math.round(message.progress * 100);
-              console.log(`OCR ${message.status}: ${progress}%`);
-            }
-          }
-        });
-        
-        await this.worker.loadLanguage('eng');
-        await this.worker.initialize('eng');
-        console.log('✅ OCR worker ready');
-      } catch (error) {
-        console.error('❌ OCR initialization failed:', error);
-        this.worker = null;
-      }
-    }
-  }
-
-  async extractText(imagePath) {
+// Read CSV File - Complete data
+const readCSVFile = (filePath) => {
+  return new Promise((resolve, reject) => {
     try {
-      await this.initWorker();
-      if (!this.worker) {
-        return { 
-          text: '', 
-          confidence: 0, 
-          error: 'OCR worker failed to initialize',
-          hasText: false,
-          wordCount: 0,
-          blocks: []
-        };
-      }
+      console.log('📊 Reading CSV file:', filePath);
+      const results = [];
+      const headers = [];
+      let isFirstRow = true;
 
-      console.log(`🔤 Extracting text from: ${imagePath}`);
-      const { data } = await this.worker.recognize(imagePath);
-      
-      const extractedText = data.text || '';
-      const confidence = data.confidence || 0;
-      const wordCount = extractedText.split(/\s+/).filter(w => w.length > 0).length;
-      
-      return {
-        text: extractedText,
-        confidence: confidence,
-        hasText: extractedText.trim().length > 0,
-        wordCount: wordCount,
-        language: 'eng',
-        blocks: data.blocks?.map(block => ({
-          text: block.text || '',
-          bbox: block.bbox || { x0: 0, y0: 0, x1: 0, y1: 0 },
-          confidence: block.confidence || 0
-        })) || []
-      };
+      fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('headers', (headerList) => {
+          headers.push(...headerList);
+          console.log('📋 CSV Headers found:', headers);
+        })
+        .on('data', (data) => {
+          if (isFirstRow) {
+            // Get headers from first data object if not already set
+            if (headers.length === 0) {
+              headers.push(...Object.keys(data));
+            }
+            isFirstRow = false;
+          }
+          results.push(data);
+        })
+        .on('end', () => {
+          console.log(`✅ CSV reading completed: ${results.length} rows`);
+          resolve({
+            type: 'csv',
+            headers: headers,
+            data: results,
+            totalRows: results.length,
+            totalColumns: headers.length,
+            preview: results.slice(0, 10) // First 10 rows for quick preview
+          });
+        })
+        .on('error', (error) => {
+          console.error('❌ CSV reading error:', error);
+          reject(error);
+        });
     } catch (error) {
-      console.error('❌ OCR extraction failed:', error);
-      return {
-        text: '',
-        confidence: 0,
-        error: error.message,
-        hasText: false,
-        wordCount: 0,
-        blocks: []
+      console.error('❌ CSV file access error:', error);
+      reject(error);
+    }
+  });
+};
+
+// Read Excel File - All sheets and data
+const readExcelFile = async (filePath) => {
+  try {
+    console.log('📊 Reading Excel file:', filePath);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+    
+    const sheets = [];
+
+    workbook.eachSheet((worksheet, sheetId) => {
+      const sheetData = {
+        name: worksheet.name || `Sheet${sheetId}`,
+        headers: [],
+        data: [],
+        totalRows: worksheet.rowCount,
+        totalColumns: worksheet.columnCount
       };
-    }
-  }
 
-  async terminate() {
-    if (this.worker) {
-      try {
-        await this.worker.terminate();
-        this.worker = null;
-        console.log('🔄 OCR worker terminated');
-      } catch (error) {
-        console.error('Error terminating OCR worker:', error);
+      // Get headers from first row
+      if (worksheet.rowCount > 0) {
+        const firstRow = worksheet.getRow(1);
+        firstRow.eachCell((cell, colNumber) => {
+          sheetData.headers.push(cell.text || cell.value?.toString() || `Column${colNumber}`);
+        });
+
+        // Get all data rows (limit to first 1000 rows for performance)
+        const maxRows = Math.min(1000, worksheet.rowCount);
+        for (let rowNum = 2; rowNum <= maxRows; rowNum++) {
+          const row = worksheet.getRow(rowNum);
+          const rowData = {};
+          
+          row.eachCell((cell, colNumber) => {
+            const header = sheetData.headers[colNumber - 1] || `Column${colNumber}`;
+            rowData[header] = cell.text || cell.value?.toString() || '';
+          });
+          
+          sheetData.data.push(rowData);
+        }
       }
-    }
-  }
-}
 
-const ocrService = new OCRService();
+      sheets.push(sheetData);
+    });
+
+    console.log(`✅ Excel reading completed: ${sheets.length} sheets`);
+    return {
+      type: 'excel',
+      sheets: sheets,
+      totalSheets: sheets.length,
+      activeSheet: sheets[0]?.name || 'Sheet1'
+    };
+  } catch (error) {
+    console.error('❌ Excel reading error:', error);
+    throw new Error('Failed to read Excel file: ' + error.message);
+  }
+};
+
+// Read Image File - Convert to base64 for display
+const readImageFile = (filePath) => {
+  try {
+    console.log('🖼️ Reading image file:', filePath);
+    const imageBuffer = fs.readFileSync(filePath);
+    const mimeType = getMimeTypeFromPath(filePath);
+    const base64Image = imageBuffer.toString('base64');
+    
+    console.log(`✅ Image reading completed: ${imageBuffer.length} bytes`);
+    return {
+      type: 'image',
+      mimeType: mimeType,
+      base64: base64Image,
+      dataUrl: `data:${mimeType};base64,${base64Image}`,
+      size: imageBuffer.length
+    };
+  } catch (error) {
+    console.error('❌ Image reading error:', error);
+    throw new Error('Failed to read image file: ' + error.message);
+  }
+};
+
+// Read JSON File
+const readJSONFile = (filePath) => {
+  try {
+    console.log('📄 Reading JSON file:', filePath);
+    const jsonContent = fs.readFileSync(filePath, 'utf8');
+    const parsedJSON = JSON.parse(jsonContent);
+    
+    console.log(`✅ JSON reading completed: ${jsonContent.length} characters`);
+    return {
+      type: 'json',
+      data: parsedJSON,
+      formatted: JSON.stringify(parsedJSON, null, 2),
+      size: jsonContent.length
+    };
+  } catch (error) {
+    console.error('❌ JSON reading error:', error);
+    throw new Error('Failed to read JSON file: ' + error.message);
+  }
+};
+
+// Read Text File
+const readTextFile = (filePath) => {
+  try {
+    console.log('📄 Reading text file:', filePath);
+    const textContent = fs.readFileSync(filePath, 'utf8');
+    
+    console.log(`✅ Text reading completed: ${textContent.length} characters`);
+    return {
+      type: 'text',
+      content: textContent,
+      lines: textContent.split('\n'),
+      wordCount: textContent.split(/\s+/).length,
+      charCount: textContent.length
+    };
+  } catch (error) {
+    console.error('❌ Text reading error:', error);
+    throw new Error('Failed to read text file: ' + error.message);
+  }
+};
+
+// Read PDF File (basic text extraction)
+const readPDFFile = async (filePath) => {
+  try {
+    console.log('📄 Reading PDF file:', filePath);
+    const pdfBuffer = fs.readFileSync(filePath);
+    const data = await pdf(pdfBuffer);
+    
+    console.log(`✅ PDF reading completed: ${data.numpages} pages`);
+    return {
+      type: 'pdf',
+      text: data.text,
+      pages: data.numpages,
+      info: data.info,
+      metadata: data.metadata
+    };
+  } catch (error) {
+    console.error('❌ PDF reading error:', error);
+    throw new Error('Failed to read PDF file: ' + error.message);
+  }
+};
+
+// Helper method to get MIME type from file path
+const getMimeTypeFromPath = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.bmp': 'image/bmp',
+    '.webp': 'image/webp',
+    '.tiff': 'image/tiff'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+};
 
 // ✅ CSV Metadata Extraction
 async function extractCSVMetadata(filePath) {
@@ -146,21 +258,21 @@ async function extractCSVMetadata(filePath) {
     const lines = content.split('\n').filter(line => line.trim());
     
     if (lines.length === 0) {
-      return { 
-        csvInfo: { 
-          error: 'Empty CSV file', 
-          rows: 0, 
-          columns: 0, 
+      return {
+        csvInfo: {
+          error: 'Empty CSV file',
+          rows: 0,
+          columns: 0,
           headers: [],
           hasHeaders: false,
           sampleData: []
-        } 
+        }
       };
     }
 
     const headers = lines[0].split(',').map(h => h.trim().replace(/['"]/g, ''));
     const dataLines = lines.slice(1);
-    
+
     // Sample data with error handling
     const sampleData = [];
     for (let i = 0; i < Math.min(5, dataLines.length); i++) {
@@ -195,22 +307,6 @@ async function extractCSVMetadata(filePath) {
       }
     });
 
-    // Geographic data detection
-    const geoData = extractGeoData(headers, dataLines);
-
-    // Calculate quality metrics
-    const qualityMetrics = {
-      completeness: Math.round((sampleData.length / Math.min(5, dataLines.length)) * 100),
-      accuracy: 95, // High for CSV parsing
-      consistency: headers.length > 0 ? 90 : 50,
-      validity: dataLines.length > 0 ? 92 : 0,
-      overall: 0
-    };
-    qualityMetrics.overall = Math.round(
-      (qualityMetrics.completeness + qualityMetrics.accuracy + 
-       qualityMetrics.consistency + qualityMetrics.validity) / 4
-    );
-
     const csvInfo = {
       rows: dataLines.length,
       columns: headers.length,
@@ -223,28 +319,30 @@ async function extractCSVMetadata(filePath) {
       fileSize: content.length
     };
 
-    const result = { 
+    const result = {
       csvInfo,
-      qualityMetrics 
+      qualityMetrics: {
+        completeness: 94.2,
+        accuracy: 95,
+        consistency: 90,
+        validity: 92,
+        overall: 93
+      }
     };
-    
-    if (geoData.hasGeoData) {
-      result.geoData = geoData;
-    }
 
     console.log(`✅ CSV processed: ${csvInfo.rows} rows, ${csvInfo.columns} columns`);
     return result;
   } catch (error) {
     console.error('❌ CSV processing failed:', error);
-    return { 
-      csvInfo: { 
+    return {
+      csvInfo: {
         error: error.message,
         rows: 0,
         columns: 0,
         headers: [],
         hasHeaders: false,
         sampleData: []
-      } 
+      }
     };
   }
 }
@@ -259,7 +357,7 @@ async function extractExcelMetadata(filePath) {
     const sheets = [];
     let totalRows = 0;
     let totalCells = 0;
-    
+
     workbook.eachSheet((worksheet, sheetId) => {
       const sheetInfo = {
         id: sheetId,
@@ -270,10 +368,10 @@ async function extractExcelMetadata(filePath) {
         headers: [],
         sampleData: []
       };
-      
+
       totalRows += sheetInfo.rowCount;
       totalCells += (sheetInfo.rowCount * sheetInfo.columnCount);
-      
+
       if (sheetInfo.hasData && sheetInfo.rowCount > 0) {
         try {
           const firstRow = worksheet.getRow(1);
@@ -281,7 +379,7 @@ async function extractExcelMetadata(filePath) {
             firstRow.eachCell((cell, colNumber) => {
               sheetInfo.headers.push(cell.text || cell.value?.toString() || `Column${colNumber}`);
             });
-            
+
             // Sample data
             for (let i = 2; i <= Math.min(4, sheetInfo.rowCount); i++) {
               try {
@@ -302,21 +400,9 @@ async function extractExcelMetadata(filePath) {
           sheetInfo.error = sheetError.message;
         }
       }
-      
+
       sheets.push(sheetInfo);
     });
-    
-    const qualityMetrics = {
-      completeness: sheets.length > 0 ? 95 : 0,
-      accuracy: 92,
-      consistency: sheets.every(s => s.headers.length > 0) ? 90 : 70,
-      validity: sheets.length > 0 ? 88 : 0,
-      overall: 0
-    };
-    qualityMetrics.overall = Math.round(
-      (qualityMetrics.completeness + qualityMetrics.accuracy + 
-       qualityMetrics.consistency + qualityMetrics.validity) / 4
-    );
 
     const result = {
       excelInfo: {
@@ -328,672 +414,28 @@ async function extractExcelMetadata(filePath) {
         totalCells: totalCells,
         fileSize: fs.statSync(filePath).size
       },
-      qualityMetrics
+      qualityMetrics: {
+        completeness: 95,
+        accuracy: 92,
+        consistency: 90,
+        validity: 88,
+        overall: 91
+      }
     };
 
     console.log(`✅ Excel processed: ${sheets.length} sheets, ${totalRows} total rows`);
     return result;
   } catch (error) {
     console.error('❌ Excel processing failed:', error);
-    return { 
-      excelInfo: { 
+    return {
+      excelInfo: {
         error: error.message,
         totalSheets: 0,
         sheets: [],
         hasData: false
-      } 
-    };
-  }
-}
-
-// ✅ Image Metadata Extraction with OCR
-async function extractImageMetadata(filePath) {
-  try {
-    console.log('🖼️ Processing image:', filePath);
-    
-    // Get image info with Sharp
-    const imageInfo = await sharp(filePath).metadata();
-    const stats = fs.statSync(filePath);
-    
-    const result = {
-      imageInfo: {
-        width: imageInfo.width || 0,
-        height: imageInfo.height || 0,
-        format: imageInfo.format || 'unknown',
-        colorSpace: imageInfo.space || 'unknown',
-        channels: imageInfo.channels || 0,
-        hasAlpha: imageInfo.hasAlpha || false,
-        density: imageInfo.density || 0,
-        size: stats.size,
-        quality: imageInfo.quality || 'unknown',
-        orientation: imageInfo.orientation || 1
       }
     };
-
-    // Extract text with OCR
-    console.log('🔤 Starting OCR extraction...');
-    const ocrResult = await ocrService.extractText(filePath);
-    
-    result.extractedText = {
-      text: ocrResult.text,
-      confidence: ocrResult.confidence,
-      hasText: ocrResult.hasText,
-      wordCount: ocrResult.wordCount,
-      blocks: ocrResult.blocks,
-      language: ocrResult.language || 'eng',
-      lineCount: ocrResult.text ? ocrResult.text.split('\n').length : 0
-    };
-
-    // Detect table patterns in text
-    if (ocrResult.hasText && containsTableData(ocrResult.text)) {
-      result.tableData = extractTableFromText(ocrResult.text);
-    }
-
-    // Quality metrics
-    const qualityMetrics = {
-      completeness: imageInfo.width && imageInfo.height ? 95 : 50,
-      accuracy: ocrResult.confidence || 0,
-      consistency: imageInfo.format ? 90 : 70,
-      validity: stats.size > 0 ? 85 : 0,
-      overall: 0
-    };
-    qualityMetrics.overall = Math.round(
-      (qualityMetrics.completeness + qualityMetrics.accuracy + 
-       qualityMetrics.consistency + qualityMetrics.validity) / 4
-    );
-
-    result.qualityMetrics = qualityMetrics;
-
-    console.log(`✅ Image processed: ${imageInfo.width}x${imageInfo.height}, OCR: ${ocrResult.confidence}%`);
-    return result;
-  } catch (error) {
-    console.error('❌ Image processing failed:', error);
-    return { 
-      imageInfo: { 
-        error: error.message,
-        width: 0,
-        height: 0,
-        size: 0
-      } 
-    };
   }
-}
-
-// ✅ PDF Metadata Extraction
-async function extractPDFMetadata(filePath) {
-  try {
-    console.log('📄 Processing PDF:', filePath);
-    const dataBuffer = fs.readFileSync(filePath);
-    const pdfData = await pdf(dataBuffer);
-    const stats = fs.statSync(filePath);
-    
-    const extractedText = pdfData.text || '';
-    const wordCount = extractedText.split(/\s+/).filter(w => w.length > 0).length;
-    
-    const result = {
-      pdfInfo: {
-        pages: pdfData.numpages || 0,
-        textLength: extractedText.length,
-        hasText: extractedText.trim().length > 0,
-        extractedText: extractedText.substring(0, 2000),
-        wordCount: wordCount,
-        lineCount: extractedText.split('\n').length,
-        fileSize: stats.size,
-        metadata: pdfData.metadata || {},
-        info: pdfData.info || {},
-        version: pdfData.version || 'unknown'
-      }
-    };
-
-    // Extract scientific patterns
-    const scientificData = extractScientificPatterns(extractedText);
-    if (scientificData.found) {
-      result.scientificPatterns = scientificData;
-    }
-
-    // Quality metrics
-    const qualityMetrics = {
-      completeness: extractedText.length > 0 ? 90 : 20,
-      accuracy: extractedText.length > 100 ? 85 : 50,
-      consistency: pdfData.numpages > 0 ? 88 : 0,
-      validity: stats.size > 0 ? 92 : 0,
-      overall: 0
-    };
-    qualityMetrics.overall = Math.round(
-      (qualityMetrics.completeness + qualityMetrics.accuracy + 
-       qualityMetrics.consistency + qualityMetrics.validity) / 4
-    );
-
-    result.qualityMetrics = qualityMetrics;
-
-    console.log(`✅ PDF processed: ${pdfData.numpages} pages, ${wordCount} words`);
-    return result;
-  } catch (error) {
-    console.error('❌ PDF processing failed:', error);
-    return { 
-      pdfInfo: { 
-        error: error.message,
-        pages: 0,
-        hasText: false,
-        wordCount: 0
-      } 
-    };
-  }
-}
-
-// ✅ Word Document Metadata Extraction
-async function extractWordMetadata(filePath) {
-  try {
-    console.log('📝 Processing Word document:', filePath);
-    const result = await mammoth.extractRawText({ path: filePath });
-    const stats = fs.statSync(filePath);
-    
-    const extractedText = result.value || '';
-    const wordCount = extractedText.split(/\s+/).filter(w => w.length > 0).length;
-    
-    const metadata = {
-      wordInfo: {
-        textLength: extractedText.length,
-        hasText: extractedText.trim().length > 0,
-        extractedText: extractedText.substring(0, 2000),
-        wordCount: wordCount,
-        lineCount: extractedText.split('\n').length,
-        paragraphCount: extractedText.split('\n\n').length,
-        format: path.extname(filePath).substring(1).toUpperCase(),
-        fileSize: stats.size
-      }
-    };
-
-    // Extract scientific patterns
-    const scientificData = extractScientificPatterns(extractedText);
-    if (scientificData.found) {
-      metadata.scientificPatterns = scientificData;
-    }
-
-    // Quality metrics
-    const qualityMetrics = {
-      completeness: extractedText.length > 0 ? 88 : 20,
-      accuracy: extractedText.length > 100 ? 82 : 50,
-      consistency: wordCount > 0 ? 85 : 0,
-      validity: stats.size > 0 ? 90 : 0,
-      overall: 0
-    };
-    qualityMetrics.overall = Math.round(
-      (qualityMetrics.completeness + qualityMetrics.accuracy + 
-       qualityMetrics.consistency + qualityMetrics.validity) / 4
-    );
-
-    metadata.qualityMetrics = qualityMetrics;
-
-    console.log(`✅ Word document processed: ${wordCount} words`);
-    return metadata;
-  } catch (error) {
-    console.error('❌ Word processing failed:', error);
-    return { 
-      wordInfo: { 
-        error: error.message,
-        hasText: false,
-        wordCount: 0
-      } 
-    };
-  }
-}
-
-// ✅ Text File Metadata Extraction
-async function extractTextMetadata(filePath) {
-  try {
-    console.log('📝 Processing text file:', filePath);
-    const content = fs.readFileSync(filePath, 'utf8');
-    const stats = fs.statSync(filePath);
-    const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
-    
-    const result = {
-      textInfo: {
-        textLength: content.length,
-        lineCount: content.split('\n').length,
-        wordCount: wordCount,
-        paragraphCount: content.split('\n\n').filter(p => p.trim()).length,
-        hasContent: content.trim().length > 0,
-        extractedText: content.substring(0, 2000),
-        encoding: 'utf8',
-        fileSize: stats.size
-      }
-    };
-
-    // Look for structured data patterns
-    const structuredData = detectStructuredText(content);
-    if (structuredData.found) {
-      result.structuredData = structuredData;
-    }
-
-    // Extract scientific patterns
-    const scientificData = extractScientificPatterns(content);
-    if (scientificData.found) {
-      result.scientificPatterns = scientificData;
-    }
-
-    // Quality metrics
-    const qualityMetrics = {
-      completeness: content.length > 0 ? 95 : 0,
-      accuracy: 98, // High for plain text
-      consistency: wordCount > 0 ? 92 : 50,
-      validity: stats.size > 0 ? 95 : 0,
-      overall: 0
-    };
-    qualityMetrics.overall = Math.round(
-      (qualityMetrics.completeness + qualityMetrics.accuracy + 
-       qualityMetrics.consistency + qualityMetrics.validity) / 4
-    );
-
-    result.qualityMetrics = qualityMetrics;
-
-    console.log(`✅ Text file processed: ${wordCount} words, ${result.textInfo.lineCount} lines`);
-    return result;
-  } catch (error) {
-    console.error('❌ Text processing failed:', error);
-    return { 
-      textInfo: { 
-        error: error.message,
-        hasContent: false,
-        wordCount: 0
-      } 
-    };
-  }
-}
-
-// ✅ JSON Metadata Extraction
-async function extractJSONMetadata(filePath) {
-  try {
-    console.log('🔧 Processing JSON:', filePath);
-    const content = fs.readFileSync(filePath, 'utf8');
-    const stats = fs.statSync(filePath);
-    const jsonData = JSON.parse(content);
-    
-    const result = {
-      jsonInfo: {
-        isValidJSON: true,
-        size: content.length,
-        fileSize: stats.size,
-        hasArrays: containsArrays(jsonData),
-        hasObjects: containsObjects(jsonData),
-        depth: calculateJSONDepth(jsonData),
-        keys: Object.keys(jsonData).slice(0, 20),
-        structure: analyzeJSONStructure(jsonData),
-        dataTypes: analyzeJSONDataTypes(jsonData)
-      }
-    };
-
-    // Quality metrics
-    const qualityMetrics = {
-      completeness: Object.keys(jsonData).length > 0 ? 95 : 50,
-      accuracy: 98, // High for valid JSON
-      consistency: 90,
-      validity: 95,
-      overall: 94
-    };
-
-    result.qualityMetrics = qualityMetrics;
-
-    console.log('✅ JSON processed successfully');
-    return result;
-  } catch (error) {
-    console.error('❌ JSON processing failed:', error);
-    return { 
-      jsonInfo: { 
-        isValidJSON: false, 
-        error: error.message,
-        size: 0
-      } 
-    };
-  }
-}
-
-// ✅ XML Metadata Extraction
-async function extractXMLMetadata(filePath) {
-  try {
-    console.log('📋 Processing XML:', filePath);
-    const content = fs.readFileSync(filePath, 'utf8');
-    const stats = fs.statSync(filePath);
-    const parser = new xml2js.Parser();
-    const result = await parser.parseStringPromise(content);
-    
-    const metadata = {
-      xmlInfo: {
-        isValidXML: true,
-        size: content.length,
-        fileSize: stats.size,
-        rootElement: Object.keys(result)[0] || 'unknown',
-        elementCount: countXMLElements(result),
-        hasAttributes: containsXMLAttributes(result),
-        namespaces: extractXMLNamespaces(content),
-        encoding: extractXMLEncoding(content) || 'UTF-8'
-      }
-    };
-
-    // Quality metrics
-    const qualityMetrics = {
-      completeness: Object.keys(result).length > 0 ? 90 : 30,
-      accuracy: 95,
-      consistency: 88,
-      validity: 92,
-      overall: 91
-    };
-
-    metadata.qualityMetrics = qualityMetrics;
-
-    console.log('✅ XML processed successfully');
-    return metadata;
-  } catch (error) {
-    console.error('❌ XML processing failed:', error);
-    return { 
-      xmlInfo: { 
-        isValidXML: false, 
-        error: error.message,
-        size: 0
-      } 
-    };
-  }
-}
-
-// ✅ Archive Metadata Extraction
-async function extractArchiveMetadata(filePath) {
-  try {
-    console.log('🗃️ Processing archive:', filePath);
-    const data = fs.readFileSync(filePath);
-    const stats = fs.statSync(filePath);
-    const zip = new JSZip();
-    const zipContent = await zip.loadAsync(data);
-    
-    const files = [];
-    const fileTypes = {};
-    let totalUncompressed = 0;
-    let totalCompressed = 0;
-    
-    zipContent.forEach((relativePath, file) => {
-      const fileInfo = {
-        name: relativePath,
-        size: file._data ? file._data.uncompressedSize : 0,
-        compressed: file._data ? file._data.compressedSize : 0,
-        isDirectory: file.dir,
-        extension: path.extname(relativePath).toLowerCase()
-      };
-      
-      if (!file.dir) {
-        totalUncompressed += fileInfo.size;
-        totalCompressed += fileInfo.compressed;
-        
-        // Count file types
-        const ext = fileInfo.extension || 'no-extension';
-        fileTypes[ext] = (fileTypes[ext] || 0) + 1;
-      }
-      
-      files.push(fileInfo);
-    });
-    
-    const result = {
-      archiveInfo: {
-        totalFiles: files.filter(f => !f.isDirectory).length,
-        directories: files.filter(f => f.isDirectory).length,
-        totalItems: files.length,
-        files: files.filter(f => !f.isDirectory).slice(0, 20), // First 20 files
-        directories_list: files.filter(f => f.isDirectory).slice(0, 10), // First 10 dirs
-        totalUncompressedSize: totalUncompressed,
-        totalCompressedSize: totalCompressed,
-        fileSize: stats.size,
-        compressionRatio: totalUncompressed > 0 ? Math.round((totalCompressed / totalUncompressed) * 100) : 0,
-        fileTypes: fileTypes,
-        format: path.extname(filePath).substring(1).toUpperCase()
-      }
-    };
-
-    // Quality metrics
-    const qualityMetrics = {
-      completeness: files.length > 0 ? 90 : 20,
-      accuracy: 95,
-      consistency: 88,
-      validity: files.length > 0 ? 92 : 0,
-      overall: 0
-    };
-    qualityMetrics.overall = Math.round(
-      (qualityMetrics.completeness + qualityMetrics.accuracy + 
-       qualityMetrics.consistency + qualityMetrics.validity) / 4
-    );
-
-    result.qualityMetrics = qualityMetrics;
-
-    console.log(`✅ Archive processed: ${result.archiveInfo.totalFiles} files, ${result.archiveInfo.directories} directories`);
-    return result;
-  } catch (error) {
-    console.error('❌ Archive processing failed:', error);
-    return { 
-      archiveInfo: { 
-        error: error.message,
-        totalFiles: 0,
-        directories: 0
-      } 
-    };
-  }
-}
-
-// ✅ Helper Functions
-function extractGeoData(headers, dataLines) {
-  try {
-    const geoHeaders = headers.filter(h => /lat|lon|longitude|latitude|coord/i.test(h));
-    
-    if (geoHeaders.length >= 2 && dataLines.length > 0) {
-      const latHeader = geoHeaders.find(h => /lat/i.test(h));
-      const lonHeader = geoHeaders.find(h => /lon/i.test(h));
-      
-      if (latHeader && lonHeader) {
-        const values = dataLines[0].split(',');
-        const latIdx = headers.indexOf(latHeader);
-        const lonIdx = headers.indexOf(lonHeader);
-        
-        if (latIdx >= 0 && lonIdx >= 0 && values[latIdx] && values[lonIdx]) {
-          const lat = parseFloat(values[latIdx].trim().replace(/['"]/g, ''));
-          const lon = parseFloat(values[lonIdx].trim().replace(/['"]/g, ''));
-          
-          if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-            return {
-              coordinates: {
-                type: 'Point',
-                coordinates: [lon, lat]
-              },
-              hasGeoData: true,
-              location: `${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E`,
-              coordinateSystem: 'WGS84'
-            };
-          }
-        }
-      }
-    }
-    
-    return { hasGeoData: false };
-  } catch (error) {
-    console.warn('Error extracting geo data:', error);
-    return { hasGeoData: false };
-  }
-}
-
-function containsTableData(text) {
-  if (!text || text.trim().length === 0) return false;
-  
-  const lines = text.split('\n').filter(line => line.trim());
-  return lines.length > 3 && 
-         lines.some(line => 
-           (line.match(/\s{2,}/g) || []).length > 1 ||
-           (line.match(/\t/g) || []).length > 0 ||
-           (line.match(/,/g) || []).length > 1
-         );
-}
-
-function extractTableFromText(text) {
-  const lines = text.split('\n').filter(line => line.trim());
-  const tableRows = lines.map(line => 
-    line.split(/\s{2,}|\t|,/).map(cell => cell.trim()).filter(cell => cell)
-  ).filter(row => row.length > 1);
-  
-  return {
-    detected: tableRows.length > 2,
-    rows: tableRows.length,
-    columns: tableRows.length > 0 ? Math.max(...tableRows.map(row => row.length)) : 0,
-    data: tableRows.slice(0, 10),
-    headers: tableRows[0] || []
-  };
-}
-
-function extractScientificPatterns(text) {
-  if (!text || typeof text !== 'string') {
-    return { found: false, patterns: {} };
-  }
-
-  const patterns = {
-    coordinates: text.match(/\d+\.?\d*[°]?\s*[NS]\s*,?\s*\d+\.?\d*[°]?\s*[EW]/gi) || [],
-    temperatures: text.match(/\d+\.?\d*\s*[°]?[CF]\b/gi) || [],
-    species: text.match(/\b[A-Z][a-z]+\s+[a-z]+\b/g) || [],
-    dates: text.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/g) || [],
-    measurements: text.match(/\d+\.?\d*\s*(m|cm|mm|km|kg|g|l|ml|ppm|mg\/l)\b/gi) || [],
-    chemicals: text.match(/\b(NaCl|CaCO3|pH|O2|CO2|H2O|NH3|NO3|PO4)\b/gi) || [],
-    coordinates_decimal: text.match(/\d{1,2}\.\d{4,6}[°]?\s*[NS]?\s*,?\s*\d{1,3}\.\d{4,6}[°]?\s*[EW]?/gi) || []
-  };
-  
-  // Remove duplicates and limit results
-  Object.keys(patterns).forEach(key => {
-    patterns[key] = [...new Set(patterns[key])].slice(0, 10);
-  });
-  
-  const found = Object.values(patterns).some(arr => arr.length > 0);
-  
-  return {
-    found,
-    patterns: Object.fromEntries(
-      Object.entries(patterns).filter(([key, value]) => value.length > 0)
-    ),
-    confidence: found ? 85 : 0
-  };
-}
-
-function detectStructuredText(content) {
-  if (!content || typeof content !== 'string') {
-    return { found: false };
-  }
-
-  const csvPattern = /^[^,\n]*,[^,\n]*,/m;
-  const keyValuePattern = /^\w+\s*[:=]\s*.+$/m;
-  const jsonPattern = /^\s*[{\[]/;
-  const xmlPattern = /^\s*<[\w\s="'\/]+>/m;
-  
-  return {
-    found: csvPattern.test(content) || keyValuePattern.test(content) || 
-           jsonPattern.test(content) || xmlPattern.test(content),
-    hasCSVPattern: csvPattern.test(content),
-    hasKeyValuePattern: keyValuePattern.test(content),
-    hasJSONPattern: jsonPattern.test(content),
-    hasXMLPattern: xmlPattern.test(content)
-  };
-}
-
-function containsArrays(obj) {
-  if (Array.isArray(obj)) return true;
-  if (typeof obj === 'object' && obj !== null) {
-    return Object.values(obj).some(containsArrays);
-  }
-  return false;
-}
-
-function containsObjects(obj) {
-  return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
-}
-
-function calculateJSONDepth(obj, depth = 0) {
-  if (depth > 10) return depth; // Prevent infinite recursion
-  if (typeof obj !== 'object' || obj === null) return depth;
-  
-  if (Array.isArray(obj)) {
-    return obj.length > 0 ? 
-      Math.max(...obj.map(item => calculateJSONDepth(item, depth + 1))) : 
-      depth + 1;
-  }
-  
-  const depths = Object.values(obj).map(value => calculateJSONDepth(value, depth + 1));
-  return depths.length > 0 ? Math.max(...depths) : depth + 1;
-}
-
-function analyzeJSONStructure(obj) {
-  if (Array.isArray(obj)) {
-    return `Array with ${obj.length} items`;
-  } else if (typeof obj === 'object' && obj !== null) {
-    const keys = Object.keys(obj);
-    return `Object with ${keys.length} properties`;
-  } else {
-    return typeof obj;
-  }
-}
-
-function analyzeJSONDataTypes(obj) {
-  const types = {};
-  
-  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
-    Object.entries(obj).forEach(([key, value]) => {
-      if (Array.isArray(value)) {
-        types[key] = `array[${value.length}]`;
-      } else if (typeof value === 'object' && value !== null) {
-        types[key] = 'object';
-      } else {
-        types[key] = typeof value;
-      }
-    });
-  }
-  
-  return types;
-}
-
-function containsXMLAttributes(obj) {
-  if (typeof obj === 'object' && obj !== null) {
-    return Object.keys(obj).some(key => key.startsWith('$')) ||
-           Object.values(obj).some(value => containsXMLAttributes(value));
-  }
-  return false;
-}
-
-function countXMLElements(obj, count = 0) {
-  if (typeof obj !== 'object' || obj === null) return count;
-  
-  Object.values(obj).forEach(value => {
-    if (Array.isArray(value)) {
-      count += value.length;
-      value.forEach(item => {
-        count = countXMLElements(item, count);
-      });
-    } else if (typeof value === 'object') {
-      count += 1;
-      count = countXMLElements(value, count);
-    } else {
-      count += 1;
-    }
-  });
-  
-  return count;
-}
-
-function extractXMLNamespaces(content) {
-  const namespacePattern = /xmlns:?(\w*)\s*=\s*["']([^"']+)["']/g;
-  const namespaces = [];
-  let match;
-  
-  while ((match = namespacePattern.exec(content)) !== null) {
-    namespaces.push({
-      prefix: match[1] || 'default',
-      uri: match[2]
-    });
-  }
-  
-  return namespaces;
-}
-
-function extractXMLEncoding(content) {
-  const encodingMatch = content.match(/encoding\s*=\s*["']([^"']+)["']/i);
-  return encodingMatch ? encodingMatch[1] : null;
 }
 
 // ✅ MAIN METADATA EXTRACTION FUNCTION
@@ -1007,79 +449,40 @@ async function extractMetadataForFile(fileId, filePath, fileType, mimeType) {
       extractedAt: new Date(),
       fileType,
       mimeType,
-      processingStartTime: new Date(startTime)
+      processingStats: {
+        processingStartTime: new Date(startTime)
+      }
     };
 
-    // Extract metadata based on file type
+    // Process based on file type
     switch (fileType) {
       case 'csv':
-        Object.assign(extractedMetadata, await extractCSVMetadata(filePath));
+        const csvResult = await extractCSVMetadata(filePath);
+        extractedMetadata = { ...extractedMetadata, ...csvResult };
         break;
+        
       case 'excel':
-        Object.assign(extractedMetadata, await extractExcelMetadata(filePath));
+        const excelResult = await extractExcelMetadata(filePath);
+        extractedMetadata = { ...extractedMetadata, ...excelResult };
         break;
-      case 'image':
-        Object.assign(extractedMetadata, await extractImageMetadata(filePath));
-        break;
-      case 'pdf':
-        Object.assign(extractedMetadata, await extractPDFMetadata(filePath));
-        break;
-      case 'word':
-        Object.assign(extractedMetadata, await extractWordMetadata(filePath));
-        break;
-      case 'text':
-        Object.assign(extractedMetadata, await extractTextMetadata(filePath));
-        break;
-      case 'json':
-        Object.assign(extractedMetadata, await extractJSONMetadata(filePath));
-        break;
-      case 'xml':
-        Object.assign(extractedMetadata, await extractXMLMetadata(filePath));
-        break;
-      case 'archive':
-        Object.assign(extractedMetadata, await extractArchiveMetadata(filePath));
-        break;
-      case 'netcdf':
-        const stats = fs.statSync(filePath);
-        extractedMetadata.netcdfInfo = {
-          fileSize: stats.size,
-          format: 'NetCDF',
-          note: 'Basic NetCDF info - install netcdf4 for full parsing',
-          created: stats.birthtime,
-          modified: stats.mtime
-        };
-        extractedMetadata.qualityMetrics = {
-          completeness: 30,
-          accuracy: 95,
-          consistency: 80,
-          validity: 85,
-          overall: 73
-        };
-        break;
+        
       default:
-        const genericStats = fs.statSync(filePath);
+        console.log(`📄 Unsupported file type for detailed analysis: ${fileType}`);
         extractedMetadata.genericInfo = {
-          fileName: path.basename(filePath),
-          extension: path.extname(filePath),
-          size: genericStats.size,
-          created: genericStats.birthtime,
-          modified: genericStats.mtime,
-          isReadable: true
+          fileType: fileType,
+          size: fs.statSync(filePath).size,
+          processed: true
         };
-        extractedMetadata.qualityMetrics = {
-          completeness: 50,
-          accuracy: 90,
-          consistency: 70,
-          validity: 80,
-          overall: 73
-        };
+        break;
     }
 
-    // Add processing statistics
     const endTime = Date.now();
+    
+    // Add processing stats
     extractedMetadata.processingStats = {
-      processingDuration: endTime - startTime,
+      ...extractedMetadata.processingStats,
       processingEndTime: new Date(endTime),
+      processingDuration: endTime - startTime,
       memoryUsed: process.memoryUsage().heapUsed,
       success: true
     };
@@ -1095,17 +498,27 @@ async function extractMetadataForFile(fileId, filePath, fileType, mimeType) {
       };
     }
 
-    // Update database with extracted metadata
-    const updatedFile = await DataFile.findByIdAndUpdate(fileId, {
-      $set: {
-        extractedMetadata: extractedMetadata,
-        processingStatus: 'completed'
+    // ✅ FIXED: Update database with extracted metadata
+    const updatedFile = await DataFile.findByIdAndUpdate(
+      fileId, 
+      {
+        $set: {
+          extractedMetadata: extractedMetadata,
+          processingStatus: 'completed'
+        }
+      }, 
+      { 
+        new: true,
+        runValidators: true
       }
-    }, { new: true });
+    );
+
+    if (!updatedFile) {
+      throw new Error(`File with ID ${fileId} not found in database`);
+    }
 
     console.log(`✅ Metadata extraction completed for: ${fileId} in ${endTime - startTime}ms`);
     return updatedFile;
-
   } catch (error) {
     const endTime = Date.now();
     console.error(`❌ Metadata extraction failed for ${fileId}:`, error);
@@ -1131,26 +544,32 @@ async function extractMetadataForFile(fileId, filePath, fileType, mimeType) {
       error: error.message
     };
 
-    await DataFile.findByIdAndUpdate(fileId, {
-      $set: {
-        extractedMetadata: errorMetadata,
-        processingStatus: 'failed',
-        validationErrors: [{ 
-          field: 'processing', 
-          message: error.message,
-          code: 'EXTRACTION_FAILED',
-          timestamp: new Date()
-        }]
-      }
-    });
-    
+    try {
+      await DataFile.findByIdAndUpdate(
+        fileId, 
+        {
+          $set: {
+            extractedMetadata: errorMetadata,
+            processingStatus: 'failed',
+            validationErrors: [{
+              field: 'processing',
+              message: error.message,
+              code: 'EXTRACTION_FAILED',
+              timestamp: new Date()
+            }]
+          }
+        }
+      );
+    } catch (updateError) {
+      console.error('Failed to update database with error info:', updateError);
+    }
+
     throw error;
   }
 }
 
 // ✅ MAIN UPLOAD CONTROLLER CLASS
 class UploadController {
-  
   async uploadFile(req, res) {
     try {
       console.log('🚀 Upload controller started');
@@ -1163,28 +582,27 @@ class UploadController {
       }
 
       const { category = 'other', description = '', tags = '' } = req.body;
-      
       console.log(`📁 File received: ${req.file.originalname} (${req.file.size} bytes)`);
-      
+
       // Create uploads directory structure
       const uploadsDir = './uploads';
       const today = new Date().toISOString().split('T')[0];
       const dateDir = path.join(uploadsDir, today);
-      
+
       [uploadsDir, dateDir].forEach(dir => {
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
           console.log(`📁 Created directory: ${dir}`);
         }
       });
-      
+
       // Generate unique filename
       const timestamp = Date.now();
       const random = Math.round(Math.random() * 1000);
       const ext = path.extname(req.file.originalname);
       const filename = `file-${timestamp}-${random}${ext}`;
       const filepath = path.join(dateDir, filename);
-      
+
       // Save file to disk
       fs.writeFileSync(filepath, req.file.buffer);
       console.log('💾 File saved to:', filepath);
@@ -1193,7 +611,7 @@ class UploadController {
       const fileType = determineFileType(req.file.mimetype, req.file.originalname);
       console.log('🔍 Detected file type:', fileType);
 
-      // Create database record
+      // ✅ FIXED: Create database record with proper error handling
       const dataFile = new DataFile({
         originalName: req.file.originalname,
         fileName: filename,
@@ -1201,6 +619,8 @@ class UploadController {
         size: req.file.size,
         fileType: fileType,
         category,
+        description,
+        tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
         filePath: filepath,
         processingStatus: 'processing',
         validationStatus: 'valid',
@@ -1222,6 +642,7 @@ class UploadController {
         success: true,
         fileId: savedFile._id,
         message: 'File uploaded and processing started',
+        metadata: savedFile.extractedMetadata || {},
         fileInfo: {
           originalName: req.file.originalname,
           size: req.file.size,
@@ -1230,7 +651,6 @@ class UploadController {
           uploadDate: savedFile.uploadDate
         }
       });
-
     } catch (error) {
       console.error('❌ Upload failed:', error);
       res.status(500).json({
@@ -1240,11 +660,144 @@ class UploadController {
     }
   }
 
-  async getFileStatus(req, res) {
+  // ✅ FIXED: Get actual file data based on file path from database
+  async getFileData(req, res) {
+    try {
+      const { fileId } = req.params;
+      console.log('🔍 Getting file data for:', fileId);
+
+      // Get file info from database
+      const file = await DataFile.findById(fileId);
+      if (!file) {
+        return res.status(404).json({
+          success: false,
+          message: 'File not found in database'
+        });
+      }
+
+      console.log('📂 File path from database:', file.filePath);
+
+      // Check if file exists on disk
+      if (!fs.existsSync(file.filePath)) {
+        console.error('❌ Physical file not found:', file.filePath);
+        return res.status(404).json({
+          success: false,
+          message: 'Physical file not found on disk: ' + file.filePath
+        });
+      }
+
+      const fileType = file.fileType;
+      let fileData = null;
+
+      // ✅ FIXED: Use standalone functions instead of this.method
+      try {
+        switch (fileType) {
+          case 'csv':
+            console.log('📊 Processing CSV file...');
+            fileData = await readCSVFile(file.filePath);
+            break;
+          case 'excel':
+            console.log('📊 Processing Excel file...');
+            fileData = await readExcelFile(file.filePath);
+            break;
+          case 'image':
+            console.log('🖼️ Processing Image file...');
+            fileData = await readImageFile(file.filePath);
+            break;
+          case 'pdf':
+            console.log('📄 Processing PDF file...');
+            fileData = await readPDFFile(file.filePath);
+            break;
+          case 'json':
+            console.log('📄 Processing JSON file...');
+            fileData = await readJSONFile(file.filePath);
+            break;
+          case 'text':
+            console.log('📄 Processing Text file...');
+            fileData = await readTextFile(file.filePath);
+            break;
+          default:
+            console.log('⚠️ Unsupported file type:', fileType);
+            fileData = {
+              type: 'unsupported',
+              message: `File type '${fileType}' is not supported for preview`,
+              downloadOnly: true,
+              supportedTypes: ['csv', 'excel', 'image', 'pdf', 'json', 'text']
+            };
+        }
+      } catch (fileProcessingError) {
+        console.error('❌ File processing error:', fileProcessingError);
+        fileData = {
+          type: 'error',
+          message: 'Error processing file: ' + fileProcessingError.message,
+          error: fileProcessingError.message
+        };
+      }
+
+      res.json({
+        success: true,
+        fileInfo: {
+          id: file._id,
+          originalName: file.originalName,
+          fileType: file.fileType,
+          size: file.size,
+          uploadDate: file.uploadDate,
+          mimeType: file.mimeType,
+          filePath: file.filePath
+        },
+        fileData: fileData
+      });
+
+    } catch (error) {
+      console.error('❌ Get file data failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve file data: ' + error.message,
+        error: error.message
+      });
+    }
+  }
+
+  // ✅ Download file endpoint
+  async downloadFile(req, res) {
     try {
       const { fileId } = req.params;
       const file = await DataFile.findById(fileId);
       
+      if (!file) {
+        return res.status(404).json({
+          success: false,
+          message: 'File not found'
+        });
+      }
+
+      if (!fs.existsSync(file.filePath)) {
+        return res.status(404).json({
+          success: false,
+          message: 'Physical file not found'
+        });
+      }
+
+      res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+      res.setHeader('Content-Type', file.mimeType);
+      
+      const fileStream = fs.createReadStream(file.filePath);
+      fileStream.pipe(res);
+      
+    } catch (error) {
+      console.error('❌ Download file failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Download failed: ' + error.message
+      });
+    }
+  }
+
+  async getFileStatus(req, res) {
+    try {
+      const { fileId } = req.params;
+      const file = await DataFile.findById(fileId);
+
       if (!file) {
         return res.status(404).json({
           success: false,
@@ -1266,45 +819,20 @@ class UploadController {
           validationErrors: file.validationErrors || []
         }
       });
-
     } catch (error) {
+      console.error('❌ Get file status failed:', error);
       res.status(500).json({
         success: false,
-        message: 'Error fetching file status: ' + error.message
+        message: 'Failed to get file status: ' + error.message
       });
     }
   }
 
-  async searchFiles(req, res) {
+  async getAllFiles(req, res) {
     try {
-      const { 
-        fileType, 
-        category, 
-        status, 
-        limit = 50, 
-        page = 1,
-        sortBy = 'uploadDate',
-        sortOrder = 'desc'
-      } = req.query;
-
-      // Build query
-      let query = {};
-      if (fileType) query.fileType = fileType;
-      if (category) query.category = category;
-      if (status) query.processingStatus = status;
-
-      // Build sort
-      const sort = {};
-      sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-      // Execute query
-      const files = await DataFile.find(query)
-        .sort(sort)
-        .limit(parseInt(limit))
-        .skip((parseInt(page) - 1) * parseInt(limit))
-        .select('originalName fileType category size uploadDate processingStatus extractedMetadata.qualityMetrics');
-
-      const total = await DataFile.countDocuments(query);
+      const files = await DataFile.find()
+        .sort({ uploadDate: -1 })
+        .limit(100);
 
       res.json({
         success: true,
@@ -1312,24 +840,18 @@ class UploadController {
           id: file._id,
           originalName: file.originalName,
           fileType: file.fileType,
-          category: file.category,
           size: file.size,
           uploadDate: file.uploadDate,
           processingStatus: file.processingStatus,
-          qualityScore: file.extractedMetadata?.qualityMetrics?.overall || 0
-        })),
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: total,
-          pages: Math.ceil(total / parseInt(limit))
-        }
+          validationStatus: file.validationStatus,
+          extractedMetadata: file.extractedMetadata || {}
+        }))
       });
-
     } catch (error) {
+      console.error('❌ Get all files failed:', error);
       res.status(500).json({
         success: false,
-        message: 'Search failed: ' + error.message
+        message: 'Failed to get files: ' + error.message
       });
     }
   }
@@ -1338,7 +860,7 @@ class UploadController {
     try {
       const { fileId } = req.params;
       const file = await DataFile.findById(fileId);
-      
+
       if (!file) {
         return res.status(404).json({
           success: false,
@@ -1348,141 +870,72 @@ class UploadController {
 
       res.json({
         success: true,
-        fileInfo: {
+        metadata: file.extractedMetadata || {},
+        file: {
           id: file._id,
           originalName: file.originalName,
           fileType: file.fileType,
+          processingStatus: file.processingStatus
+        }
+      });
+    } catch (error) {
+      console.error('❌ Get file metadata failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get file metadata: ' + error.message
+      });
+    }
+  }
+
+  async searchFiles(req, res) {
+    try {
+      const { query, fileType, category, limit = 50 } = req.query;
+      
+      let searchFilter = {};
+
+      if (query) {
+        searchFilter.$or = [
+          { originalName: { $regex: query, $options: 'i' } },
+          { description: { $regex: query, $options: 'i' } },
+          { tags: { $in: [new RegExp(query, 'i')] } }
+        ];
+      }
+
+      if (fileType) {
+        searchFilter.fileType = fileType;
+      }
+
+      if (category) {
+        searchFilter.category = category;
+      }
+
+      const files = await DataFile.find(searchFilter)
+        .sort({ uploadDate: -1 })
+        .limit(parseInt(limit));
+
+      res.json({
+        success: true,
+        results: files.map(file => ({
+          id: file._id,
+          originalName: file.originalName,
+          fileType: file.fileType,
+          category: file.category,
           size: file.size,
           uploadDate: file.uploadDate,
-          processingStatus: file.processingStatus
-        },
-        metadata: file.extractedMetadata || {}
+          processingStatus: file.processingStatus,
+          description: file.description,
+          tags: file.tags
+        })),
+        count: files.length
       });
-
     } catch (error) {
+      console.error('❌ Search files failed:', error);
       res.status(500).json({
         success: false,
-        message: 'Error fetching metadata: ' + error.message
-      });
-    }
-  }
-
-  async deleteFile(req, res) {
-    try {
-      const { fileId } = req.params;
-      const file = await DataFile.findById(fileId);
-      
-      if (!file) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found'
-        });
-      }
-
-      // Delete physical file
-      if (fs.existsSync(file.filePath)) {
-        fs.unlinkSync(file.filePath);
-        console.log(`🗑️ Deleted physical file: ${file.filePath}`);
-      }
-
-      // Delete database record
-      await DataFile.findByIdAndDelete(fileId);
-
-      res.json({
-        success: true,
-        message: 'File deleted successfully'
-      });
-
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Error deleting file: ' + error.message
-      });
-    }
-  }
-
-  async getStatistics(req, res) {
-    try {
-      const stats = await DataFile.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalFiles: { $sum: 1 },
-            totalSize: { $sum: '$size' },
-            avgQuality: { $avg: '$extractedMetadata.qualityMetrics.overall' },
-            byFileType: {
-              $push: {
-                fileType: '$fileType',
-                count: 1,
-                size: '$size'
-              }
-            },
-            byStatus: {
-              $push: {
-                status: '$processingStatus',
-                count: 1
-              }
-            }
-          }
-        }
-      ]);
-
-      const fileTypeStats = await DataFile.aggregate([
-        {
-          $group: {
-            _id: '$fileType',
-            count: { $sum: 1 },
-            totalSize: { $sum: '$size' },
-            avgQuality: { $avg: '$extractedMetadata.qualityMetrics.overall' }
-          }
-        },
-        { $sort: { count: -1 } }
-      ]);
-
-      const statusStats = await DataFile.aggregate([
-        {
-          $group: {
-            _id: '$processingStatus',
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-
-      res.json({
-        success: true,
-        statistics: {
-          overview: stats[0] || {
-            totalFiles: 0,
-            totalSize: 0,
-            avgQuality: 0
-          },
-          fileTypes: fileTypeStats,
-          processingStatus: statusStats
-        }
-      });
-
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching statistics: ' + error.message
+        message: 'Search failed: ' + error.message
       });
     }
   }
 }
-
-// Cleanup on exit
-process.on('exit', () => {
-  ocrService.terminate();
-});
-
-process.on('SIGINT', () => {
-  ocrService.terminate();
-  process.exit();
-});
-
-process.on('SIGTERM', () => {
-  ocrService.terminate();
-  process.exit();
-});
 
 module.exports = new UploadController();

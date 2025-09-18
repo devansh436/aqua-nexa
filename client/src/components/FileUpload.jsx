@@ -15,6 +15,33 @@ import {
   ImageIcon,
   FileIcon,
 } from "./icons";
+import {
+  Box,
+  Typography,
+  Paper,
+  Grid,
+  Card,
+  CardContent,
+  Button,
+  Chip,
+  IconButton,
+  LinearProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField,
+  Alert,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemSecondaryAction,
+  Divider,
+  Stack,
+  Avatar,
+  Tooltip,
+} from "@mui/material";
 
 function FileUpload() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -51,176 +78,54 @@ function FileUpload() {
       value: "ocean_data",
       label: "🌊 Ocean Data",
       description: "Temperature, salinity, current data",
-      icon: <FileIcon />,
-      accepts: ".nc,.csv,.xlsx,.json",
     },
     {
-      value: "fish_data",
-      label: "🐟 Fish Data",
-      description: "Species counts, catch data",
-      icon: <FileIcon />,
-      accepts: ".csv,.xlsx,.json",
+      value: "satellite_imagery",
+      label: "🛰️ Satellite Imagery",
+      description: "Remote sensing data",
     },
     {
-      value: "otolith_image",
-      label: "🔬 Otolith Images",
-      description: "Fish ear bone microscopy",
-      icon: <ImageIcon />,
-      accepts: ".jpg,.jpeg,.png,.tiff,.bmp",
+      value: "research_data",
+      label: "🔬 Research Data",
+      description: "Scientific datasets",
     },
     {
-      value: "research_table",
-      label: "📊 Research Tables",
-      description: "Data tables from images/documents",
-      icon: <FileIcon />,
-      accepts: ".jpg,.jpeg,.png,.pdf",
-    },
-    {
-      value: "document",
+      value: "documents",
       label: "📄 Documents",
-      description: "Research papers, reports",
-      icon: <FileIcon />,
-      accepts: ".pdf,.doc,.docx,.txt",
-    },
-    {
-      value: "scientific_data",
-      label: "🧪 Scientific Data",
-      description: "JSON, XML, NetCDF files",
-      icon: <FileIcon />,
-      accepts: ".json,.xml,.nc,.h5,.mat",
+      description: "Reports, papers, documentation",
     },
     {
       value: "other",
       label: "📁 Other",
-      description: "All supported file types",
-      icon: <FileIcon />,
-      accepts: "*",
+      description: "General files",
     },
   ];
 
-  const onDrop = useCallback(
-    (acceptedFiles, rejectedFiles) => {
-      if (serverHealth !== "connected") {
-        toast.error(
-          "❌ Server not connected. Please check backend connection."
-        );
-        return;
-      }
+  // File type icon mapping
+  const getFileIcon = (fileType) => {
+    if (fileType?.startsWith("image/")) return <ImageIcon color="primary" />;
+    if (fileType?.includes("pdf")) return <FileIcon color="error" />;
+    if (fileType?.includes("excel") || fileType?.includes("csv"))
+      return <FileIcon color="success" />;
+    if (fileType?.includes("word")) return <FileIcon color="info" />;
+    if (fileType?.includes("json")) return <FileIcon color="warning" />;
+    if (fileType?.includes("zip") || fileType?.includes("archive"))
+      return <FileIcon color="secondary" />;
+    return <FileIcon color="action" />;
+  };
 
-      if (rejectedFiles.length > 0) {
-        rejectedFiles.forEach((file) => {
-          toast.error(
-            `File ${file.file.name} rejected: ${
-              file.errors[0]?.message || "Unknown error"
-            }`
-          );
-        });
-      }
+  const formatFileSize = (bytes) => {
+    if (!bytes) return "N/A";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
-      if (acceptedFiles.length > 0) {
-        acceptedFiles.forEach((file) => {
-          handleFileUpload(file);
-        });
-      }
-    },
-    [selectedCategory, description, tags, serverHealth]
-  );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: getAcceptedTypes(),
-    maxSize: 500 * 1024 * 1024, // 500MB
-    multiple: true,
-    disabled: uploading || serverHealth !== "connected",
-  });
-
-  function getAcceptedTypes() {
-    const selectedCat = categories.find(
-      (cat) => cat.value === selectedCategory
-    );
-    if (!selectedCat || selectedCat.accepts === "*") {
-      return {
-        "image/*": [".jpeg", ".jpg", ".png", ".gif", ".bmp", ".tiff", ".webp"],
-        "text/csv": [".csv"],
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-          ".xlsx",
-        ],
-        "application/vnd.ms-excel": [".xls"],
-        "application/pdf": [".pdf"],
-        "application/msword": [".doc"],
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-          [".docx"],
-        "text/plain": [".txt"],
-        "application/json": [".json"],
-        "application/xml": [".xml"],
-        "text/xml": [".xml"],
-        "application/zip": [".zip"],
-        "application/x-netcdf": [".nc"],
-      };
-    }
-
-    const extensions = selectedCat.accepts.split(",");
-    const mimeTypes = {};
-
-    extensions.forEach((ext) => {
-      switch (ext.trim()) {
-        case ".jpg":
-        case ".jpeg":
-        case ".png":
-        case ".gif":
-        case ".bmp":
-        case ".tiff":
-        case ".webp":
-          mimeTypes["image/*"] = mimeTypes["image/*"] || [];
-          mimeTypes["image/*"].push(ext.trim());
-          break;
-        case ".csv":
-          mimeTypes["text/csv"] = [".csv"];
-          break;
-        case ".xlsx":
-          mimeTypes[
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          ] = [".xlsx"];
-          break;
-        case ".xls":
-          mimeTypes["application/vnd.ms-excel"] = [".xls"];
-          break;
-        case ".pdf":
-          mimeTypes["application/pdf"] = [".pdf"];
-          break;
-        case ".doc":
-          mimeTypes["application/msword"] = [".doc"];
-          break;
-        case ".docx":
-          mimeTypes[
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          ] = [".docx"];
-          break;
-        case ".txt":
-          mimeTypes["text/plain"] = [".txt"];
-          break;
-        case ".json":
-          mimeTypes["application/json"] = [".json"];
-          break;
-        case ".xml":
-          mimeTypes["application/xml"] = [".xml"];
-          mimeTypes["text/xml"] = [".xml"];
-          break;
-        case ".zip":
-          mimeTypes["application/zip"] = [".zip"];
-          break;
-        case ".nc":
-          mimeTypes["application/x-netcdf"] = [".nc"];
-          break;
-      }
-    });
-
-    return mimeTypes;
-  }
-
-  const handleFileUpload = async (file) => {
-    if (uploading) {
-      toast.warning("Please wait for current upload to complete");
+  // Handle file upload
+  const handleUpload = async (files) => {
+    if (serverHealth !== "connected") {
+      toast.error("Please ensure the server is running before uploading files");
       return;
     }
 
@@ -228,518 +133,430 @@ function FileUpload() {
     setUploadProgress(0);
 
     try {
-      console.log(`🚀 Starting upload: ${file.name} (${file.size} bytes)`);
-
-      const metadata = {
-        category: selectedCategory,
-        description: description.trim(),
-        tags: tags.trim(),
-      };
-
-      // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 10, 90));
-      }, 200);
-
-      const response = await uploadFile(file, metadata);
-
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
-      if (response.success) {
-        const newFile = {
-          id: response.fileId,
-          name: file.name,
-          size: file.size,
-          type: file.type,
+      const uploadPromises = files.map(async (file, index) => {
+        const metadata = {
           category: selectedCategory,
-          status: "processing",
-          uploadDate: new Date(),
-          description,
-          tags: tags
-            .split(",")
-            .map((t) => t.trim())
-            .filter((t) => t),
-          detectedType: response.fileInfo.detectedType,
+          description: description,
+          tags: tags,
         };
 
-        setUploadedFiles((prev) => [newFile, ...prev]);
-        toast.success(
-          `✅ ${file.name} uploaded successfully! Detected as: ${response.fileInfo.detectedType}`
-        );
+        try {
+          setUploadProgress((prev) => prev + 90 / files.length);
 
-        // Poll for processing status
-        pollFileStatus(response.fileId);
+          const response = await uploadFile(file, metadata);
 
-        // Clear form
-        setDescription("");
-        setTags("");
-      }
+          const newFile = {
+            id: response.fileId || Date.now() + index,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            category: selectedCategory,
+            description: description,
+            tags: tags,
+            status: "completed",
+            uploadDate: new Date().toISOString(),
+            extractedMetadata: response.metadata,
+            preview: file.type.startsWith("image/")
+              ? URL.createObjectURL(file)
+              : null,
+            file: file,
+          };
+
+          setUploadedFiles((prev) => [...prev, newFile]);
+          toast.success(`✅ ${file.name} uploaded successfully!`);
+
+          return newFile;
+        } catch (error) {
+          console.error(`Upload failed for ${file.name}:`, error);
+
+          const failedFile = {
+            id: Date.now() + index,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            category: selectedCategory,
+            status: "failed",
+            error: error.message,
+            uploadDate: new Date().toISOString(),
+          };
+
+          setUploadedFiles((prev) => [...prev, failedFile]);
+          toast.error(`❌ Failed to upload ${file.name}: ${error.message}`);
+
+          return failedFile;
+        }
+      });
+
+      await Promise.all(uploadPromises);
+      setUploadProgress(100);
+
+      // Reset form
+      setDescription("");
+      setTags("");
+      setSelectedCategory("other");
     } catch (error) {
-      console.error("Upload failed:", error);
-      toast.error(`❌ Upload failed: ${error.message}`);
+      console.error("Upload process failed:", error);
+      toast.error("Upload process failed");
     } finally {
-      setTimeout(() => {
-        setUploading(false);
-        setUploadProgress(0);
-      }, 1000);
+      setUploading(false);
+      setTimeout(() => setUploadProgress(0), 1000);
     }
   };
 
-  const pollFileStatus = async (fileId) => {
-    const maxPolls = 60; // 10 minutes maximum (10s intervals)
-    let pollCount = 0;
-
-    const poll = async () => {
-      try {
-        const response = await getFileStatus(fileId);
-
-        setUploadedFiles((prev) =>
-          prev.map((file) =>
-            file.id === fileId
-              ? {
-                  ...file,
-                  status: response.file.processingStatus,
-                  extractedMetadata: response.file.extractedMetadata,
-                  validationErrors: response.file.validationErrors,
-                }
-              : file
-          )
-        );
-
-        if (response.file.processingStatus === "completed") {
-          toast.success(
-            `🎉 Processing completed for ${response.file.originalName}`
+  // Dropzone configuration
+  const onDrop = useCallback(
+    (acceptedFiles, rejectedFiles) => {
+      if (rejectedFiles.length > 0) {
+        rejectedFiles.forEach((rejection) => {
+          toast.error(
+            `❌ ${rejection.file.name}: ${rejection.errors[0].message}`
           );
-          return;
-        }
-
-        if (response.file.processingStatus === "failed") {
-          toast.error(`❌ Processing failed for ${response.file.originalName}`);
-          return;
-        }
-
-        if (
-          pollCount < maxPolls &&
-          response.file.processingStatus === "processing"
-        ) {
-          pollCount++;
-          setTimeout(poll, 10000); // Poll every 10 seconds
-        } else if (pollCount >= maxPolls) {
-          toast.warning(
-            `⏰ Processing timeout for ${response.file.originalName}`
-          );
-        }
-      } catch (error) {
-        console.error("Error polling file status:", error);
+        });
       }
-    };
 
-    poll();
-  };
+      if (acceptedFiles.length > 0) {
+        handleUpload(acceptedFiles);
+      }
+    },
+    [selectedCategory, description, tags, serverHealth]
+  );
 
+  const { getRootProps, getInputProps, isDragActive, isDragReject } =
+    useDropzone({
+      onDrop,
+      accept: {
+        "image/*": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"],
+        "application/vnd.ms-excel": [".xls"],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+          ".xlsx",
+        ],
+        "text/csv": [".csv"],
+        "application/pdf": [".pdf"],
+        "application/msword": [".doc"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+          [".docx"],
+        "text/plain": [".txt"],
+        "application/json": [".json"],
+        "application/xml": [".xml"],
+        "application/zip": [".zip"],
+        "application/x-netcdf": [".nc"],
+      },
+      maxSize: 500 * 1024 * 1024, // 500MB
+      multiple: true,
+    });
+
+  // Handle preview
   const handlePreview = (file) => {
     setSelectedFile(file);
     setPreviewDialog(true);
   };
 
+  // Handle file deletion
   const handleDeleteFile = (fileId) => {
     setUploadedFiles((prev) => prev.filter((file) => file.id !== fileId));
-    toast.info("🗑️ File removed from list");
+    toast.info("File removed from list");
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "completed":
-        return <CheckCircleIcon color="success" />;
-      case "failed":
-        return <Error color="error" />;
-      case "processing":
-      default:
-        return <PendingIcon color="warning" />;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "completed":
-        return "success";
-      case "failed":
-        return "error";
-      case "processing":
-      default:
-        return "warning";
-    }
-  };
-
-  const getFileTypeIcon = (detectedType) => {
-    switch (detectedType) {
-      case "image":
-        return <Image color="primary" />;
-      case "csv":
-        return <TableChart color="success" />;
-      case "excel":
-        return <TableChart color="info" />;
-      case "pdf":
-        return <PictureAsPdf color="error" />;
-      case "word":
-        return <Description color="primary" />;
-      case "json":
-      case "xml":
-        return <Code color="secondary" />;
-      case "archive":
-        return <Archive color="warning" />;
-      default:
-        return <InsertDriveFile />;
-    }
-  };
-
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-
-  const getServerStatusChip = () => {
-    switch (serverHealth) {
-      case "connected":
-        return (
-          <Chip label="🟢 Server Connected" color="success" size="small" />
-        );
-      case "disconnected":
-        return (
-          <Chip label="🔴 Server Disconnected" color="error" size="small" />
-        );
-      default:
-        return (
-          <Chip label="🟡 Checking Connection" color="warning" size="small" />
-        );
-    }
-  };
+  // Server health status component
+  const ServerHealthStatus = () => (
+    <Box sx={{ mb: 2 }}>
+      <Alert
+        severity={
+          serverHealth === "connected"
+            ? "success"
+            : serverHealth === "disconnected"
+            ? "error"
+            : "info"
+        }
+        action={
+          <IconButton size="small" onClick={checkServerHealth}>
+            <RefreshIcon />
+          </IconButton>
+        }
+      >
+        {serverHealth === "connected" && "✅ Server connected"}
+        {serverHealth === "disconnected" &&
+          "❌ Server disconnected - Please start the backend server on port 5000"}
+        {serverHealth === "checking" && "🔄 Checking server connection..."}
+      </Alert>
+    </Box>
+  );
 
   return (
-    <div className="upload">
-      {/* Server Status & Stats */}
-      <div className="card mb-4">
-        <div className="flex items-center gap-4">
-          <div
-            className={`upload__status-chip upload__status-chip--${serverHealth}`}
-          >
-            {serverHealth === "connected" && "🟢 Server Connected"}
-            {serverHealth === "disconnected" && "🔴 Server Disconnected"}
-            {serverHealth === "checking" && "🟡 Checking Connection"}
-          </div>
+    <Box sx={{ p: 3, maxWidth: "100%", margin: "0 auto" }}>
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{ fontWeight: "bold", mb: 3, color: "black" }}
+      >
+        📁 File Upload Center
+      </Typography>
 
-          <button
-            className="button button--secondary flex items-center gap-2"
-            onClick={checkServerHealth}
-          >
-            <RefreshIcon />
-            Check Connection
-          </button>
+      <ServerHealthStatus />
 
-          <div className="ml-auto text-sm text-secondary">
-            Total Files Uploaded:{" "}
-            <span className="font-semibold">{uploadedFiles.length}</span>
-          </div>
-        </div>
-      </div>
+      <Grid container spacing={3}>
+        {/* Upload Section */}
+        <Grid item xs={12} md={6}>
+          <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Upload Configuration
+            </Typography>
 
-      {/* Upload Configuration */}
-      <div className="card mb-4">
-        <h2 className="text-xl font-semibold mb-4">📝 Upload Configuration</h2>
+            <Stack spacing={2} sx={{ mb: 3 }}>
+              <FormControl fullWidth>
+                <InputLabel>Category</InputLabel>
+                <Select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  label="Category"
+                >
+                  {categories.map((category) => (
+                    <MenuItem key={category.value} value={category.value}>
+                      <Box>
+                        <Typography variant="body1">
+                          {category.label}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          component="div"
+                        >
+                          {category.description}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-        <div className="grid gap-4">
-          <div className="w-full">
-            <label htmlFor="category" className="upload-form__label">
-              Select Data Category
-            </label>
-            <select
-              id="category"
-              className="upload-form__select"
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-            >
-              {categories.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label} - {cat.description}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="description" className="upload-form__label">
-                Description
-              </label>
-              <textarea
-                id="description"
-                className="upload-form__input"
+              <TextField
+                label="Description (Optional)"
+                multiline
+                rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of your data..."
-                rows={3}
+                placeholder="Describe your file..."
               />
-            </div>
 
-            <div>
-              <label htmlFor="tags" className="upload-form__label">
-                Tags
-              </label>
-              <input
-                id="tags"
-                type="text"
-                className="upload-form__input"
+              <TextField
+                label="Tags (Optional)"
                 value={tags}
                 onChange={(e) => setTags(e.target.value)}
-                placeholder="tag1, tag2, tag3..."
+                placeholder="Enter tags separated by commas..."
               />
-              <span className="text-sm text-secondary mt-1 block">
-                Comma-separated tags for organization
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+            </Stack>
 
-      {/* File Drop Zone */}
-      <div
-        {...getRootProps()}
-        className={`upload-zone ${isDragActive ? "upload-zone--active" : ""} ${
-          uploading || serverHealth !== "connected"
-            ? "opacity-60 cursor-not-allowed"
-            : ""
-        }`}
-      >
-        <input {...getInputProps()} />
+            {/* Dropzone */}
+            <Paper
+              {...getRootProps()}
+              elevation={isDragActive ? 8 : 1}
+              sx={{
+                p: 4,
+                textAlign: "center",
+                cursor: "pointer",
+                border: "2px dashed",
+                borderColor: isDragReject
+                  ? "error.main"
+                  : isDragActive
+                  ? "primary.main"
+                  : "grey.300",
+                bgcolor: isDragReject
+                  ? "error.light"
+                  : isDragActive
+                  ? "primary.light"
+                  : "grey.50",
+                transition: "all 0.3s ease",
+                "&:hover": {
+                  bgcolor: "primary.light",
+                  borderColor: "primary.main",
+                },
+              }}
+            >
+              <input {...getInputProps()} />
+              <CloudUploadIcon
+                sx={{ fontSize: 48, color: "primary.main", mb: 2 }}
+              />
 
-        {serverHealth !== "connected" ? (
-          <div className="text-center">
-            <div className="upload-zone__icon text-error">
-              <ErrorIcon />
-            </div>
-            <h3 className="upload-zone__title text-error">
-              ❌ Server Not Connected
-            </h3>
-            <p className="upload-zone__text">
-              Please start the backend server on port 5000
-            </p>
-          </div>
-        ) : uploading ? (
-          <div className="text-center">
-            <div className="upload-zone__icon text-primary">
-              <CloudUploadIcon />
-            </div>
-            <h3 className="upload-zone__title">🚀 Uploading...</h3>
-            <p className="upload-zone__text">
-              Please wait while your file is being processed
-            </p>
-          </div>
-        ) : isDragActive ? (
-          <div className="text-center">
-            <div className="upload-zone__icon text-primary">
-              <CloudUploadIcon />
-            </div>
-            <h3 className="upload-zone__title">Drop your files here! 🎯</h3>
-          </div>
-        ) : (
-          <div className="text-center">
-            <div className="upload-zone__icon">
-              <CloudUploadIcon />
-            </div>
-            <h3 className="upload-zone__title">
-              Drag & drop files here, or click to browse
-            </h3>
-            <p className="upload-zone__text">
-              <strong>Supported formats:</strong> Images (JPG, PNG, GIF, BMP,
-              TIFF, WebP), Spreadsheets (CSV, XLSX, XLS), Documents (PDF, DOC,
-              DOCX, TXT), Data (JSON, XML), Archives (ZIP), Scientific (NetCDF)
-            </p>
-            <p className="upload-zone__text">
-              Maximum file size: <strong>500MB per file</strong>
-            </p>
-            {selectedCategory !== "other" && (
-              <div className="upload-form__chip">
-                Selected category accepts:{" "}
-                {categories.find((c) => c.value === selectedCategory)?.accepts}
-              </div>
+              {isDragReject ? (
+                <Typography color="error">
+                  Some files will be rejected
+                </Typography>
+              ) : isDragActive ? (
+                <Typography variant="h6" color="primary">
+                  Drop files here...
+                </Typography>
+              ) : (
+                <>
+                  <Typography variant="h6" gutterBottom>
+                    Drag & Drop Files Here
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    or click to select files
+                  </Typography>
+                </>
+              )}
+
+              {/* Fixed: Use component="div" to avoid p > div nesting */}
+              <Typography
+                variant="caption"
+                display="block"
+                sx={{ mt: 2 }}
+                component="div"
+              >
+                <strong>Supported formats:</strong> Images (JPG, PNG, GIF, BMP,
+                TIFF, WebP), Spreadsheets (CSV, XLSX, XLS), Documents (PDF, DOC,
+                DOCX, TXT), Data (JSON, XML), Archives (ZIP), Scientific
+                (NetCDF)
+              </Typography>
+              <Typography
+                variant="caption"
+                display="block"
+                color="primary"
+                component="div"
+              >
+                <strong>Maximum file size: 500MB per file</strong>
+              </Typography>
+            </Paper>
+
+            {uploading && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  Uploading... {Math.round(uploadProgress)}%
+                </Typography>
+                <LinearProgress variant="determinate" value={uploadProgress} />
+              </Box>
             )}
-          </div>
-        )}
-      </div>
+          </Paper>
+        </Grid>
 
-      {/* Upload Progress */}
-      {uploading && (
-        <div className="mb-4">
-          <UploadProgress progress={uploadProgress} />
-        </div>
-      )}
+        {/* Uploaded Files Section */}
+        <Grid item xs={12} md={6}>
+          <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              📋 Uploaded Files ({uploadedFiles.length})
+            </Typography>
 
-      {/* Uploaded Files List */}
-      {uploadedFiles.length > 0 && (
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4">
-            📁 Uploaded Files ({uploadedFiles.length})
-          </h2>
+            {uploadedFiles.length === 0 ? (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <FileIcon sx={{ fontSize: 64, color: "grey.400", mb: 2 }} />
+                <Typography color="text.secondary">
+                  No files uploaded yet
+                </Typography>
+              </Box>
+            ) : (
+              <List sx={{ maxHeight: 600, overflowY: "auto" }}>
+                {uploadedFiles.map((file, index) => (
+                  <React.Fragment key={file.id}>
+                    <ListItem sx={{ py: 2 }}>
+                      <ListItemIcon>
+                        <Avatar sx={{ bgcolor: "grey.100" }}>
+                          {getFileIcon(file.type)}
+                        </Avatar>
+                      </ListItemIcon>
 
-          <div className="file-list">
-            {uploadedFiles.map((file, index) => (
-              <div key={file.id} className="file-card">
-                <div className="file-card__header">
-                  <div className="text-primary">
-                    {file.detectedType === "image" ? (
-                      <ImageIcon />
-                    ) : (
-                      <FileIcon />
-                    )}
-                  </div>
+                      <ListItemText
+                        primary={
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              variant="subtitle2"
+                              noWrap
+                              sx={{ maxWidth: 200 }}
+                            >
+                              {file.name}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label={file.status}
+                              color={
+                                file.status === "completed"
+                                  ? "success"
+                                  : "error"
+                              }
+                              icon={
+                                file.status === "completed" ? (
+                                  <CheckCircleIcon />
+                                ) : (
+                                  <ErrorIcon />
+                                )
+                              }
+                            />
+                          </Box>
+                        }
+                        secondary={
+                          <Stack spacing={0.5}>
+                            {/* Fixed: Use component="div" for Typography containing complex content */}
+                            <Typography variant="caption" component="div">
+                              Size: {formatFileSize(file.size)} • Category:{" "}
+                              {file.category?.replace("_", " ")} •
+                              {new Date(file.uploadDate).toLocaleString()}
+                            </Typography>
+                            {file.error && (
+                              <Typography
+                                variant="caption"
+                                color="error"
+                                component="div"
+                              >
+                                Error: {file.error}
+                              </Typography>
+                            )}
+                          </Stack>
+                        }
+                      />
 
-                  <div className="file-card__title">
-                    {getStatusIcon(file.status)}
-                    {file.name}
-                  </div>
-
-                  <div
-                    className={`file-card__status file-card__status--${file.status}`}
-                  >
-                    {file.status}
-                  </div>
-
-                  {file.detectedType && (
-                    <div className="file-card__tag">
-                      {file.detectedType.toUpperCase()}
-                    </div>
-                  )}
-                </div>
-
-                <div className="file-card__meta">
-                  📦 {formatFileSize(file.size)} • 📁{" "}
-                  {file.category.replace("_", " ")} • 📅{" "}
-                  {file.uploadDate.toLocaleString()}
-                </div>
-
-                {file.description && (
-                  <div className="file-card__description">
-                    📝 {file.description}
-                  </div>
-                )}
-
-                {file.tags && file.tags.length > 0 && (
-                  <div className="file-card__tags">
-                    {file.tags.map((tag, tagIndex) => (
-                      <div key={tagIndex} className="file-card__tag">
-                        {tag}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {file.validationErrors && file.validationErrors.length > 0 && (
-                  <div className="alert alert--error mt-2">
-                    {file.validationErrors.map((err) => err.message).join(", ")}
-                  </div>
-                )}
-
-                {file.extractedMetadata && file.status === "completed" && (
-                  <div className="file-card__tags mt-2">
-                    {file.extractedMetadata.extractedText?.text && (
-                      <div className="file-card__tag file-card__tag--info">
-                        Text extracted (
-                        {file.extractedMetadata.extractedText.confidence}%
-                        confidence)
-                      </div>
-                    )}
-
-                    {file.extractedMetadata.csvInfo && (
-                      <div className="file-card__tag file-card__tag--success">
-                        CSV: {file.extractedMetadata.csvInfo.rows} rows,{" "}
-                        {file.extractedMetadata.csvInfo.columns} columns
-                      </div>
-                    )}
-
-                    {file.extractedMetadata.excelInfo && (
-                      <div className="file-card__tag file-card__tag--info">
-                        Excel: {file.extractedMetadata.excelInfo.totalSheets}{" "}
-                        sheets
-                      </div>
-                    )}
-
-                    {file.extractedMetadata.imageInfo && (
-                      <div className="file-card__tag file-card__tag--warning">
-                        Image: {file.extractedMetadata.imageInfo.width}×
-                        {file.extractedMetadata.imageInfo.height}px,{" "}
-                        {file.extractedMetadata.imageInfo.format}
-                      </div>
-                    )}
-
-                    {file.extractedMetadata.pdfInfo && (
-                      <div className="file-card__tag file-card__tag--error">
-                        PDF: {file.extractedMetadata.pdfInfo.pages} pages,{" "}
-                        {file.extractedMetadata.pdfInfo.wordCount} words
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="file-card__actions">
-                  {file.status === "completed" && (
-                    <button
-                      onClick={() => handlePreview(file)}
-                      className="button--icon button--preview"
-                    >
-                      <VisibilityIcon />
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => handleDeleteFile(file.id)}
-                    className="button--icon button--delete"
-                  >
-                    <DeleteIcon />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+                      <ListItemSecondaryAction>
+                        <Stack direction="row" spacing={1}>
+                          {file.status === "completed" && (
+                            <Tooltip title="Preview File">
+                              <IconButton
+                                size="small"
+                                onClick={() => handlePreview(file)}
+                                color="primary"
+                              >
+                                <VisibilityIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          <Tooltip title="Remove from List">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteFile(file.id)}
+                              color="error"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                    {index < uploadedFiles.length - 1 && <Divider />}
+                  </React.Fragment>
+                ))}
+              </List>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
 
       {/* File Preview Modal */}
-      {previewDialog && (
-        <dialog open className="modal">
-          <div
-            className="modal__overlay"
-            onClick={() => setPreviewDialog(false)}
-          />
-          <div className="modal__content">
-            <div className="modal__header">
-              <h2 className="modal__title">📄 File Preview</h2>
-              <button
-                className="modal__close"
-                onClick={() => setPreviewDialog(false)}
-                aria-label="Close modal"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal__body">
-              {selectedFile && <FilePreview file={selectedFile} />}
-            </div>
-            <div className="modal__footer">
-              <button
-                className="button button--secondary"
-                onClick={() => setPreviewDialog(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </dialog>
-      )}
-    </div>
+      <FilePreview
+        open={previewDialog}
+        onClose={() => {
+          setPreviewDialog(false);
+          setSelectedFile(null);
+        }}
+        file={selectedFile}
+      />
+    </Box>
   );
 }
 
