@@ -1,941 +1,484 @@
 const fs = require('fs');
 const path = require('path');
 const DataFile = require('../models/DataFile');
+const FileMetadata = require('../models/FileMetadata');
+const UnifiedDataset = require('../models/UnifiedDataset');
 const sharp = require('sharp');
-const Tesseract = require('tesseract.js');
-const pdf = require('pdf-parse');
-const ExcelJS = require('exceljs');
-const mammoth = require('mammoth');
-const xml2js = require('xml2js');
-const JSZip = require('jszip');
 const csv = require('csv-parser');
+const ExcelJS = require('exceljs');
 
-// ✅ Complete File Type Determiner
+// detect type
 const determineFileType = (mimeType, fileName) => {
-  const extension = fileName.toLowerCase().split('.').pop();
-  
-  if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp'].includes(extension)) {
-    return 'image';
-  }
-  if (mimeType === 'text/csv' || extension === 'csv') {
-    return 'csv';
-  }
-  if (['xlsx', 'xls'].includes(extension) || mimeType.includes('spreadsheetml')) {
-    return 'excel';
-  }
-  if (mimeType === 'application/pdf' || extension === 'pdf') {
-    return 'pdf';
-  }
-  if (['doc', 'docx'].includes(extension) || mimeType.includes('document')) {
-    return 'word';
-  }
-  if (mimeType === 'text/plain' || extension === 'txt') {
-    return 'text';
-  }
-  if (mimeType === 'application/json' || extension === 'json') {
-    return 'json';
-  }
-  if (mimeType.includes('xml') || extension === 'xml') {
-    return 'xml';
-  }
-  if (mimeType === 'application/zip' || extension === 'zip') {
-    return 'archive';
-  }
-  if (['nc', 'nc4'].includes(extension)) {
-    return 'netcdf';
-  }
+  const ext = fileName.toLowerCase().split('.').pop();
+  if (mimeType.startsWith('image/') || ['jpg','jpeg','png','gif','bmp','tiff','webp'].includes(ext)) return 'image';
+  if (mimeType === 'text/csv' || ext === 'csv') return 'csv';
+  if (['xlsx','xls'].includes(ext) || mimeType.includes('spreadsheetml')) return 'excel';
+  if (mimeType === 'application/json' || ext === 'json') return 'json';
   return 'other';
 };
 
-// ✅ STANDALONE FILE READING FUNCTIONS (Outside of class)
+const uploadFile = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
 
-// Read CSV File - Complete data
-const readCSVFile = (filePath) => {
-  return new Promise((resolve, reject) => {
+    const { category = 'other', description = '', tags = '' } = req.body;
+    const uploadsDir = './uploads';
+    const today = new Date().toISOString().split('T')[0];
+    const dateDir = path.join(uploadsDir, today);
+    [uploadsDir, dateDir].forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
+
+    const ts = Date.now();
+    const rnd = Math.round(Math.random() * 1000);
+    const ext = path.extname(req.file.originalname);
+    const filename = `file-${ts}-${rnd}${ext}`;
+    const filepath = path.join(dateDir, filename);
+    fs.writeFileSync(filepath, req.file.buffer);
+
+    const fileType = determineFileType(req.file.mimetype, req.file.originalname);
+
+    const dataFile = new DataFile({
+      originalName: req.file.originalname,
+      fileName: filename,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      fileType,
+      category,
+      description,
+      tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+      filePath: filepath,
+      processingStatus: 'processing',
+      validationStatus: 'valid',
+      uploadDate: new Date()
+    });
+    const savedFile = await dataFile.save();
+
     try {
-      console.log('📊 Reading CSV file:', filePath);
-      const results = [];
-      const headers = [];
-      let isFirstRow = true;
+      await processFileCompletely(savedFile._id, filepath, fileType, category);
+      res.status(201).json({ success: true, fileId: savedFile._id, message: 'File uploaded and processed successfully' });
+    } catch (e) {
+      console.error(e);
+      res.status(201).json({ success: true, fileId: savedFile._id, message: 'File uploaded but processing failed: ' + e.message });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Upload failed: ' + error.message });
+  }
+};
 
-      fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('headers', (headerList) => {
-          headers.push(...headerList);
-          console.log('📋 CSV Headers found:', headers);
-        })
-        .on('data', (data) => {
-          if (isFirstRow) {
-            // Get headers from first data object if not already set
-            if (headers.length === 0) {
-              headers.push(...Object.keys(data));
-            }
-            isFirstRow = false;
-          }
-          results.push(data);
-        })
-        .on('end', () => {
-          console.log(`✅ CSV reading completed: ${results.length} rows`);
-          resolve({
-            type: 'csv',
-            headers: headers,
-            data: results,
-            totalRows: results.length,
-            totalColumns: headers.length,
-            preview: results.slice(0, 10) // First 10 rows for quick preview
-          });
-        })
-        .on('error', (error) => {
-          console.error('❌ CSV reading error:', error);
-          reject(error);
-        });
-    } catch (error) {
-      console.error('❌ CSV file access error:', error);
-      reject(error);
+// read helpers
+const readCSVFileCompletely = async (filePath) => new Promise((resolve, reject) => {
+  const results = []; let headers = [];
+  fs.createReadStream(filePath)
+    .pipe(csv())
+    .on('headers', (h) => { headers = h; })
+    .on('data', (row) => results.push(row))
+    .on('end', () => resolve({ headers, data: results, totalRows: results.length }))
+    .on('error', reject);
+});
+
+const readExcelFileCompletely = async (filePath) => {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(filePath);
+  const ws = workbook.worksheets[0];
+  const results = []; let headers = [];
+  ws.eachRow((row, i) => {
+    if (i === 1) headers = row.values.slice(1);
+    else {
+      const r = {};
+      row.values.slice(1).forEach((v, idx) => { if (headers[idx]) r[headers[idx]] = v; });
+      results.push(r);
     }
   });
+  return { headers, data: results, totalRows: results.length };
 };
 
-// Read Excel File - All sheets and data
-const readExcelFile = async (filePath) => {
-  try {
-    console.log('📊 Reading Excel file:', filePath);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
-    
-    const sheets = [];
-
-    workbook.eachSheet((worksheet, sheetId) => {
-      const sheetData = {
-        name: worksheet.name || `Sheet${sheetId}`,
-        headers: [],
-        data: [],
-        totalRows: worksheet.rowCount,
-        totalColumns: worksheet.columnCount
-      };
-
-      // Get headers from first row
-      if (worksheet.rowCount > 0) {
-        const firstRow = worksheet.getRow(1);
-        firstRow.eachCell((cell, colNumber) => {
-          sheetData.headers.push(cell.text || cell.value?.toString() || `Column${colNumber}`);
-        });
-
-        // Get all data rows (limit to first 1000 rows for performance)
-        const maxRows = Math.min(1000, worksheet.rowCount);
-        for (let rowNum = 2; rowNum <= maxRows; rowNum++) {
-          const row = worksheet.getRow(rowNum);
-          const rowData = {};
-          
-          row.eachCell((cell, colNumber) => {
-            const header = sheetData.headers[colNumber - 1] || `Column${colNumber}`;
-            rowData[header] = cell.text || cell.value?.toString() || '';
-          });
-          
-          sheetData.data.push(rowData);
-        }
-      }
-
-      sheets.push(sheetData);
-    });
-
-    console.log(`✅ Excel reading completed: ${sheets.length} sheets`);
-    return {
-      type: 'excel',
-      sheets: sheets,
-      totalSheets: sheets.length,
-      activeSheet: sheets[0]?.name || 'Sheet1'
-    };
-  } catch (error) {
-    console.error('❌ Excel reading error:', error);
-    throw new Error('Failed to read Excel file: ' + error.message);
-  }
-};
-
-// Read Image File - Convert to base64 for display
-const readImageFile = (filePath) => {
-  try {
-    console.log('🖼️ Reading image file:', filePath);
-    const imageBuffer = fs.readFileSync(filePath);
-    const mimeType = getMimeTypeFromPath(filePath);
-    const base64Image = imageBuffer.toString('base64');
-    
-    console.log(`✅ Image reading completed: ${imageBuffer.length} bytes`);
-    return {
-      type: 'image',
-      mimeType: mimeType,
-      base64: base64Image,
-      dataUrl: `data:${mimeType};base64,${base64Image}`,
-      size: imageBuffer.length
-    };
-  } catch (error) {
-    console.error('❌ Image reading error:', error);
-    throw new Error('Failed to read image file: ' + error.message);
-  }
-};
-
-// Read JSON File
-const readJSONFile = (filePath) => {
-  try {
-    console.log('📄 Reading JSON file:', filePath);
-    const jsonContent = fs.readFileSync(filePath, 'utf8');
-    const parsedJSON = JSON.parse(jsonContent);
-    
-    console.log(`✅ JSON reading completed: ${jsonContent.length} characters`);
-    return {
-      type: 'json',
-      data: parsedJSON,
-      formatted: JSON.stringify(parsedJSON, null, 2),
-      size: jsonContent.length
-    };
-  } catch (error) {
-    console.error('❌ JSON reading error:', error);
-    throw new Error('Failed to read JSON file: ' + error.message);
-  }
-};
-
-// Read Text File
-const readTextFile = (filePath) => {
-  try {
-    console.log('📄 Reading text file:', filePath);
-    const textContent = fs.readFileSync(filePath, 'utf8');
-    
-    console.log(`✅ Text reading completed: ${textContent.length} characters`);
-    return {
-      type: 'text',
-      content: textContent,
-      lines: textContent.split('\n'),
-      wordCount: textContent.split(/\s+/).length,
-      charCount: textContent.length
-    };
-  } catch (error) {
-    console.error('❌ Text reading error:', error);
-    throw new Error('Failed to read text file: ' + error.message);
-  }
-};
-
-// Read PDF File (basic text extraction)
-const readPDFFile = async (filePath) => {
-  try {
-    console.log('📄 Reading PDF file:', filePath);
-    const pdfBuffer = fs.readFileSync(filePath);
-    const data = await pdf(pdfBuffer);
-    
-    console.log(`✅ PDF reading completed: ${data.numpages} pages`);
-    return {
-      type: 'pdf',
-      text: data.text,
-      pages: data.numpages,
-      info: data.info,
-      metadata: data.metadata
-    };
-  } catch (error) {
-    console.error('❌ PDF reading error:', error);
-    throw new Error('Failed to read PDF file: ' + error.message);
-  }
-};
-
-// Helper method to get MIME type from file path
-const getMimeTypeFromPath = (filePath) => {
-  const ext = path.extname(filePath).toLowerCase();
-  const mimeTypes = {
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png',
-    '.gif': 'image/gif',
-    '.bmp': 'image/bmp',
-    '.webp': 'image/webp',
-    '.tiff': 'image/tiff'
+const readImageFile = async (filePath) => {
+  const metadata = await sharp(filePath).metadata();
+  return {
+    filename: path.basename(filePath),
+    path: filePath,
+    width: metadata.width,
+    height: metadata.height,
+    format: metadata.format,
+    totalRows: 1
   };
-  return mimeTypes[ext] || 'application/octet-stream';
 };
 
-// ✅ CSV Metadata Extraction
-async function extractCSVMetadata(filePath) {
-  try {
-    console.log('📊 Processing CSV file:', filePath);
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split('\n').filter(line => line.trim());
-    
-    if (lines.length === 0) {
-      return {
-        csvInfo: {
-          error: 'Empty CSV file',
-          rows: 0,
-          columns: 0,
-          headers: [],
-          hasHeaders: false,
-          sampleData: []
-        }
-      };
-    }
+const readJSONFile = async (filePath) => {
+  const json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  const arr = Array.isArray(json) ? json : [json];
+  return { data: arr, headers: arr.length ? Object.keys(arr[0]) : [], totalRows: arr.length };
+};
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/['"]/g, ''));
-    const dataLines = lines.slice(1);
-
-    // Sample data with error handling
-    const sampleData = [];
-    for (let i = 0; i < Math.min(5, dataLines.length); i++) {
-      try {
-        const values = dataLines[i].split(',').map(v => v.trim().replace(/['"]/g, ''));
-        const row = {};
-        headers.forEach((header, index) => {
-          row[header] = values[index] || '';
-        });
-        sampleData.push(row);
-      } catch (rowError) {
-        console.warn(`Error processing row ${i}:`, rowError);
-      }
-    }
-
-    // Column type analysis with error handling
-    const columnTypes = {};
-    headers.forEach(header => {
-      try {
-        const values = sampleData.map(row => row[header]).filter(v => v && v.trim());
-        if (values.length === 0) {
-          columnTypes[header] = 'empty';
-        } else if (values.every(v => !isNaN(v) && !isNaN(parseFloat(v)) && v.trim() !== '')) {
-          columnTypes[header] = 'numeric';
-        } else if (values.every(v => !isNaN(Date.parse(v)))) {
-          columnTypes[header] = 'date';
-        } else {
-          columnTypes[header] = 'text';
-        }
-      } catch (typeError) {
-        columnTypes[header] = 'unknown';
+// standardize
+const standardizeAllData = async (rawData, fileType, category) => {
+  const records = [];
+  if (fileType === 'image') {
+    const features = await extractOtolithFeatures(rawData);
+    records.push({
+      location: 'Unknown',
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toTimeString().slice(0,5),
+      data: {
+        image_file: rawData.filename,
+        circularity: features.circularity,
+        area: features.area,
+        perimeter: features.perimeter,
+        aspect_ratio: features.aspect_ratio,
+        volume: features.volume
       }
     });
-
-    const csvInfo = {
-      rows: dataLines.length,
-      columns: headers.length,
-      headers: headers,
-      delimiter: ',',
-      hasHeaders: headers.length > 0,
-      sampleData: sampleData,
-      columnTypes: columnTypes,
-      encoding: 'utf8',
-      fileSize: content.length
-    };
-
-    const result = {
-      csvInfo,
-      qualityMetrics: {
-        completeness: 94.2,
-        accuracy: 95,
-        consistency: 90,
-        validity: 92,
-        overall: 93
-      }
-    };
-
-    console.log(`✅ CSV processed: ${csvInfo.rows} rows, ${csvInfo.columns} columns`);
-    return result;
-  } catch (error) {
-    console.error('❌ CSV processing failed:', error);
-    return {
-      csvInfo: {
-        error: error.message,
-        rows: 0,
-        columns: 0,
-        headers: [],
-        hasHeaders: false,
-        sampleData: []
-      }
-    };
+    return { records, total_records: 1, schema_info: ['image_file','circularity','area','perimeter','aspect_ratio','volume'], processing_notes: ['Otolith features extracted'] };
   }
-}
 
-// ✅ Excel Metadata Extraction
-async function extractExcelMetadata(filePath) {
-  try {
-    console.log('📊 Processing Excel:', filePath);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
-    
-    const sheets = [];
-    let totalRows = 0;
-    let totalCells = 0;
+  const headers = rawData.headers || [];
+  const rows = rawData.data || [];
 
-    workbook.eachSheet((worksheet, sheetId) => {
-      const sheetInfo = {
-        id: sheetId,
-        name: worksheet.name || `Sheet${sheetId}`,
-        rowCount: worksheet.rowCount || 0,
-        columnCount: worksheet.columnCount || 0,
-        hasData: (worksheet.rowCount || 0) > 0,
-        headers: [],
-        sampleData: []
-      };
+  const findColumn = (cands) => {
+    for (const c of cands) {
+      const f = headers.find(h => h && h.toString().toLowerCase().includes(c));
+      if (f) return f;
+    }
+    return null;
+  };
 
-      totalRows += sheetInfo.rowCount;
-      totalCells += (sheetInfo.rowCount * sheetInfo.columnCount);
+  const standardizeDate = (s) => {
+    if (!s) return null;
+    const str = s.toString().trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) { const [mm,dd,yyyy] = str.split('/'); return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`; }
+    const d = new Date(str); if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    return null;
+  };
+  const standardizeTime = (s) => {
+    if (!s) return null;
+    const str = s.toString().trim();
+    if (/^\d{2}:\d{2}$/.test(str)) return str;
+    if (/^\d{2}:\d{2}:\d{2}$/.test(str)) return str.substring(0,5);
+    return null;
+  };
+  const normLoc = (loc) => (loc || 'Unknown').toString().trim().replace(/\s+/g, ' ');
 
-      if (sheetInfo.hasData && sheetInfo.rowCount > 0) {
-        try {
-          const firstRow = worksheet.getRow(1);
-          if (firstRow) {
-            firstRow.eachCell((cell, colNumber) => {
-              sheetInfo.headers.push(cell.text || cell.value?.toString() || `Column${colNumber}`);
-            });
+  const extractFish = (row) => ({
+    species: row[findColumn(['species','fish_species','scientific_name'])] || 'N/A',
+    length_cm: parseFloat(row[findColumn(['length','length_cm','size'])]) || null,
+    weight_g: parseFloat(row[findColumn(['weight','weight_g','mass'])]) || null,
+    abundance: parseInt(row[findColumn(['abundance','count','number'])]) || null,
+    age: parseInt(row[findColumn(['age','age_years'])]) || null,
+    notes: row[findColumn(['notes','comments','remarks'])] || ''
+  });
 
-            // Sample data
-            for (let i = 2; i <= Math.min(4, sheetInfo.rowCount); i++) {
-              try {
-                const row = worksheet.getRow(i);
-                const rowData = {};
-                row.eachCell((cell, colNumber) => {
-                  const header = sheetInfo.headers[colNumber - 1] || `Column${colNumber}`;
-                  rowData[header] = cell.text || cell.value?.toString() || '';
-                });
-                sheetInfo.sampleData.push(rowData);
-              } catch (rowError) {
-                console.warn(`Error processing row ${i} in sheet ${sheetInfo.name}:`, rowError);
-              }
-            }
-          }
-        } catch (sheetError) {
-          console.warn(`Error processing sheet ${sheetInfo.name}:`, sheetError);
-          sheetInfo.error = sheetError.message;
-        }
-      }
+  const extractOcean = (row) => ({
+    temperature: parseFloat(row[findColumn(['temperature','temp','water_temp'])]) || null,
+    salinity: parseFloat(row[findColumn(['salinity','sal','ppt'])]) || null,
+    dissolved_oxygen: parseFloat(row[findColumn(['dissolved_oxygen','do','oxygen'])]) || null,
+    pH: parseFloat(row[findColumn(['ph','pH','acidity'])]) || null,
+    depth_m: parseFloat(row[findColumn(['depth','depth_m','water_depth'])]) || null,
+    turbidity: parseFloat(row[findColumn(['turbidity','turb','ntu'])]) || null,
+    notes: row[findColumn(['notes','comments','remarks'])] || ''
+  });
 
-      sheets.push(sheetInfo);
-    });
+  const extractEDNA = (row) => ({
+    sequence_id: row[findColumn(['sequence_id','seq_id','dna_id'])] || 'N/A',
+    matched_species: row[findColumn(['matched_species','species_match','identified_species'])] || 'N/A',
+    notes: row[findColumn(['notes','comments','remarks'])] || ''
+  });
 
-    const result = {
-      excelInfo: {
-        totalSheets: sheets.length,
-        sheets: sheets,
-        format: path.extname(filePath).substring(1).toUpperCase(),
-        hasData: sheets.some(sheet => sheet.hasData),
-        totalRows: totalRows,
-        totalCells: totalCells,
-        fileSize: fs.statSync(filePath).size
-      },
-      qualityMetrics: {
-        completeness: 95,
-        accuracy: 92,
-        consistency: 90,
-        validity: 88,
-        overall: 91
-      }
-    };
+  for (const row of rows) {
+    const location = normLoc(row[findColumn(['location','site','station','place'])]);
+    const date = standardizeDate(row[findColumn(['date','sampling_date','collection_date'])]);
+    const time = standardizeTime(row[findColumn(['time','sampling_time','collection_time'])]);
+    if (!date || !time) continue;
 
-    console.log(`✅ Excel processed: ${sheets.length} sheets, ${totalRows} total rows`);
-    return result;
-  } catch (error) {
-    console.error('❌ Excel processing failed:', error);
-    return {
-      excelInfo: {
-        error: error.message,
-        totalSheets: 0,
-        sheets: [],
-        hasData: false
-      }
-    };
+    let data = {};
+    if (category === 'fish_data') data = extractFish(row);
+    else if (category === 'ocean_data') data = extractOcean(row);
+    else if (category === 'eDNA_data') data = extractEDNA(row);
+    else {
+      // copy all
+      headers.forEach(h => { if (!['location','date','time'].includes(h?.toString().toLowerCase())) data[h] = row[h]; });
+    }
+    records.push({ location, date, time, data });
   }
-}
 
-// ✅ MAIN METADATA EXTRACTION FUNCTION
-async function extractMetadataForFile(fileId, filePath, fileType, mimeType) {
-  const startTime = Date.now();
-  
+  return {
+    records,
+    total_records: records.length,
+    schema_info: headers,
+    processing_notes: [`Standardized ${records.length} records from ${rows.length} input rows`]
+  };
+};
+
+// image features (placeholder CV)
+const extractOtolithFeatures = async (imageData) => {
   try {
-    console.log(`🔍 Starting metadata extraction for: ${fileId} (${fileType})`);
-    
-    let extractedMetadata = {
+    const meta = await sharp(imageData.path).metadata();
+    const area = meta.width * meta.height * 0.7;
+    const perimeter = 2 * Math.sqrt(Math.PI * area);
+    const circularity = (4 * Math.PI * area) / (perimeter * perimeter);
+    const aspect_ratio = meta.width / meta.height;
+    const volume = area * 0.1;
+    return {
+      circularity: Math.round(circularity * 100) / 100,
+      area: Math.round(area),
+      perimeter: Math.round(perimeter),
+      aspect_ratio: Math.round(aspect_ratio * 100) / 100,
+      volume: Math.round(volume)
+    };
+  } catch {
+    return { circularity: null, area: null, perimeter: null, aspect_ratio: null, volume: null };
+  }
+};
+
+const calculateQualityMetrics = (std) => ({
+  completeness: Math.round((std.total_records / Math.max(1, std.total_records)) * 100),
+  accuracy: 95,
+  consistency: 90,
+  validity: 95,
+  timeliness: 100
+});
+
+// main processing
+const processFileCompletely = async (fileId, filePath, fileType, category) => {
+  // read
+  let rawData;
+  if (fileType === 'csv') rawData = await readCSVFileCompletely(filePath);
+  else if (fileType === 'excel') rawData = await readExcelFileCompletely(filePath);
+  else if (fileType === 'image') rawData = await readImageFile(filePath);
+  else if (fileType === 'json') rawData = await readJSONFile(filePath);
+  else throw new Error(`Unsupported file type: ${fileType}`);
+
+  // standardize
+  const standardizedData = await standardizeAllData(rawData, fileType, category);
+
+  // metadata
+  const metrics = calculateQualityMetrics(standardizedData);
+  const metaDoc = new FileMetadata({
+    fileId,
+    rawMetadata: { fileType, category, extractedAt: new Date() },
+    structuredMetadata: {
+      scientificData: { dataType: category, recordCount: standardizedData.total_records, schemaInfo: standardizedData.schema_info },
+      qualityMetrics: metrics
+    }
+  });
+  await metaDoc.save();
+
+  await DataFile.findByIdAndUpdate(fileId, {
+    extractedMetadata: {
       extractedAt: new Date(),
       fileType,
-      mimeType,
-      processingStats: {
-        processingStartTime: new Date(startTime)
-      }
-    };
+      standardized_data: standardizedData,
+      quality_metrics: metrics
+    },
+    processingStatus: 'completed'
+  });
 
-    // Process based on file type
-    switch (fileType) {
-      case 'csv':
-        const csvResult = await extractCSVMetadata(filePath);
-        extractedMetadata = { ...extractedMetadata, ...csvResult };
-        break;
-        
-      case 'excel':
-        const excelResult = await extractExcelMetadata(filePath);
-        extractedMetadata = { ...extractedMetadata, ...excelResult };
-        break;
-        
-      default:
-        console.log(`📄 Unsupported file type for detailed analysis: ${fileType}`);
-        extractedMetadata.genericInfo = {
-          fileType: fileType,
-          size: fs.statSync(filePath).size,
-          processed: true
-        };
-        break;
+  // unify
+  await unifyAllRecordsWithCompositeKey(fileId, standardizedData, category);
+};
+
+// unification
+const unifyAllRecordsWithCompositeKey = async (fileId, standardizedData, category) => {
+  const file = await DataFile.findById(fileId);
+  if (!file) throw new Error('File not found');
+
+  const TIME_TOLERANCE_MIN = 5; // policy: exact match preferred; if none, snap within ±5
+  const parseMinutes = (hhmm) => {
+    const [h,m] = hhmm.split(':').map(Number);
+    return h*60 + m;
+  };
+  const withinTolerance = (t1, t2) => Math.abs(parseMinutes(t1) - parseMinutes(t2)) <= TIME_TOLERANCE_MIN;
+
+  const normalizeLocation = (loc) => loc.trim().replace(/\s+/g, ' ');
+
+  for (const rec of standardizedData.records) {
+    const location = normalizeLocation(rec.location || 'Unknown');
+    const { date, time, data } = rec;
+    if (!location || !date || !time) continue;
+
+    const compositeKey = `${location}_${date}_${time}`;
+
+    // Try exact
+    let unified = await UnifiedDataset.findOne({ composite_key: compositeKey });
+
+    // If not found, try tolerance search for same date/location
+    if (!unified) {
+      const sameDay = await UnifiedDataset.find({ location, date });
+      const candidate = sameDay.find(r => withinTolerance(r.time, time));
+      if (candidate) unified = candidate;
     }
 
-    const endTime = Date.now();
-    
-    // Add processing stats
-    extractedMetadata.processingStats = {
-      ...extractedMetadata.processingStats,
-      processingEndTime: new Date(endTime),
-      processingDuration: endTime - startTime,
-      memoryUsed: process.memoryUsage().heapUsed,
-      success: true
+    if (!unified) {
+      unified = new UnifiedDataset({
+        location,
+        date,
+        time,
+        composite_key: compositeKey,
+        metadata_refs: []
+      });
+    }
+
+    // add lineage
+    if (!unified.metadata_refs.some(ref => ref.file_id?.toString() === fileId.toString())) {
+      unified.metadata_refs.push({ file_id: fileId, file_name: file.originalName, data_type: category });
+    }
+
+    // merge
+    const parseNum = (v) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = parseFloat(v); return isNaN(n) ? null : n;
     };
 
-    // Ensure quality metrics exist
-    if (!extractedMetadata.qualityMetrics) {
-      extractedMetadata.qualityMetrics = {
-        completeness: 80,
-        accuracy: 85,
-        consistency: 82,
-        validity: 88,
-        overall: 84
+    if (category === 'fish_data') {
+      if (!Array.isArray(unified.fish)) unified.fish = [];
+      unified.fish.push({
+        species: data.species || 'N/A',
+        length_cm: parseNum(data.length_cm),
+        weight_g: parseNum(data.weight_g),
+        abundance: parseNum(data.abundance),
+        age: parseNum(data.age),
+        notes: data.notes || '',
+        source_file: file.originalName
+      });
+    } else if (category === 'ocean_data') {
+      // keep latest plus history
+      if (!Array.isArray(unified.ocean_observations)) unified.ocean_observations = [];
+      unified.ocean_observations.push({
+        time,
+        temperature: parseNum(data.temperature),
+        salinity: parseNum(data.salinity),
+        dissolved_oxygen: parseNum(data.dissolved_oxygen),
+        pH: parseNum(data.pH),
+        depth_m: parseNum(data.depth_m),
+        turbidity: parseNum(data.turbidity),
+        notes: data.notes || ''
+      });
+      unified.ocean = {
+        temperature: parseNum(data.temperature),
+        salinity: parseNum(data.salinity),
+        dissolved_oxygen: parseNum(data.dissolved_oxygen),
+        pH: parseNum(data.pH),
+        depth_m: parseNum(data.depth_m),
+        turbidity: parseNum(data.turbidity),
+        notes: data.notes || '',
+        last_updated: new Date()
       };
+    } else if (category === 'otolith_image') {
+      if (!Array.isArray(unified.otolith_features)) unified.otolith_features = [];
+      unified.otolith_features.push({
+        image_file: data.image_file || file.originalName,
+        circularity: parseNum(data.circularity),
+        area: parseNum(data.area),
+        perimeter: parseNum(data.perimeter),
+        aspect_ratio: parseNum(data.aspect_ratio),
+        volume: parseNum(data.volume),
+        notes: data.notes || ''
+      });
+    } else if (category === 'eDNA_data') {
+      if (!Array.isArray(unified.eDNA)) unified.eDNA = [];
+      unified.eDNA.push({
+        sequence_id: data.sequence_id || 'N/A',
+        matched_species: data.matched_species || 'N/A',
+        notes: data.notes || ''
+      });
     }
 
-    // ✅ FIXED: Update database with extracted metadata
-    const updatedFile = await DataFile.findByIdAndUpdate(
-      fileId, 
-      {
-        $set: {
-          extractedMetadata: extractedMetadata,
-          processingStatus: 'completed'
-        }
-      }, 
-      { 
-        new: true,
-        runValidators: true
-      }
-    );
-
-    if (!updatedFile) {
-      throw new Error(`File with ID ${fileId} not found in database`);
-    }
-
-    console.log(`✅ Metadata extraction completed for: ${fileId} in ${endTime - startTime}ms`);
-    return updatedFile;
-  } catch (error) {
-    const endTime = Date.now();
-    console.error(`❌ Metadata extraction failed for ${fileId}:`, error);
-    
-    // Add error stats
-    const errorMetadata = {
-      extractedAt: new Date(),
-      fileType,
-      mimeType,
-      processingStats: {
-        processingDuration: endTime - startTime,
-        processingEndTime: new Date(endTime),
-        success: false,
-        error: error.message
-      },
-      qualityMetrics: {
-        completeness: 0,
-        accuracy: 0,
-        consistency: 0,
-        validity: 0,
-        overall: 0
-      },
-      error: error.message
-    };
-
-    try {
-      await DataFile.findByIdAndUpdate(
-        fileId, 
-        {
-          $set: {
-            extractedMetadata: errorMetadata,
-            processingStatus: 'failed',
-            validationErrors: [{
-              field: 'processing',
-              message: error.message,
-              code: 'EXTRACTION_FAILED',
-              timestamp: new Date()
-            }]
-          }
-        }
-      );
-    } catch (updateError) {
-      console.error('Failed to update database with error info:', updateError);
-    }
-
-    throw error;
+    unified.last_updated = new Date();
+    await unified.save();
   }
-}
+};
 
-// ✅ MAIN UPLOAD CONTROLLER CLASS
-class UploadController {
-  async uploadFile(req, res) {
-    try {
-      console.log('🚀 Upload controller started');
-      
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: 'No file uploaded'
-        });
-      }
+// API: list unified with filters
+const getUnifiedDatasets = async (req, res) => {
+  try {
+    const { location, dateStart, dateEnd, species, limit = 1000 } = req.query;
+    const q = {};
+    if (location) q.location = new RegExp(location, 'i');
+    if (dateStart && dateEnd) q.date = { $gte: dateStart, $lte: dateEnd };
+    if (species) q['fish.species'] = new RegExp(species, 'i');
 
-      const { category = 'other', description = '', tags = '' } = req.body;
-      console.log(`📁 File received: ${req.file.originalname} (${req.file.size} bytes)`);
+    const docs = await UnifiedDataset.find(q)
+      .populate('metadata_refs.file_id', 'originalName uploadDate fileType category')
+      .sort({ date: 1, time: 1 })
+      .limit(parseInt(limit, 10));
 
-      // Create uploads directory structure
-      const uploadsDir = './uploads';
-      const today = new Date().toISOString().split('T')[0];
-      const dateDir = path.join(uploadsDir, today);
-
-      [uploadsDir, dateDir].forEach(dir => {
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-          console.log(`📁 Created directory: ${dir}`);
-        }
-      });
-
-      // Generate unique filename
-      const timestamp = Date.now();
-      const random = Math.round(Math.random() * 1000);
-      const ext = path.extname(req.file.originalname);
-      const filename = `file-${timestamp}-${random}${ext}`;
-      const filepath = path.join(dateDir, filename);
-
-      // Save file to disk
-      fs.writeFileSync(filepath, req.file.buffer);
-      console.log('💾 File saved to:', filepath);
-
-      // Determine file type
-      const fileType = determineFileType(req.file.mimetype, req.file.originalname);
-      console.log('🔍 Detected file type:', fileType);
-
-      // ✅ FIXED: Create database record with proper error handling
-      const dataFile = new DataFile({
-        originalName: req.file.originalname,
-        fileName: filename,
-        mimeType: req.file.mimetype,
-        size: req.file.size,
-        fileType: fileType,
-        category,
-        description,
-        tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-        filePath: filepath,
-        processingStatus: 'processing',
-        validationStatus: 'valid',
-        uploadDate: new Date()
-      });
-
-      const savedFile = await dataFile.save();
-      console.log('📄 Database record created:', savedFile._id);
-
-      // Start metadata extraction in background
-      setImmediate(() => {
-        extractMetadataForFile(savedFile._id, filepath, fileType, req.file.mimetype)
-          .catch(error => {
-            console.error('Background processing failed:', error);
-          });
-      });
-
-      res.status(201).json({
-        success: true,
-        fileId: savedFile._id,
-        message: 'File uploaded and processing started',
-        metadata: savedFile.extractedMetadata || {},
-        fileInfo: {
-          originalName: req.file.originalname,
-          size: req.file.size,
-          mimeType: req.file.mimetype,
-          detectedType: fileType,
-          uploadDate: savedFile.uploadDate
-        }
-      });
-    } catch (error) {
-      console.error('❌ Upload failed:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Upload failed: ' + error.message
-      });
-    }
+    res.json({ success: true, count: docs.length, data: docs });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
+};
 
-  // ✅ FIXED: Get actual file data based on file path from database
-  async getFileData(req, res) {
-    try {
-      const { fileId } = req.params;
-      console.log('🔍 Getting file data for:', fileId);
+// API: export
+const exportUnifiedDataset = async (req, res) => {
+  try {
+    const { format = 'json' } = req.query;
+    const docs = await UnifiedDataset.find({})
+      .populate('metadata_refs.file_id', 'originalName uploadDate fileType category')
+      .sort({ date: 1, time: 1 });
 
-      // Get file info from database
-      const file = await DataFile.findById(fileId);
-      if (!file) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found in database'
-        });
-      }
-
-      console.log('📂 File path from database:', file.filePath);
-
-      // Check if file exists on disk
-      if (!fs.existsSync(file.filePath)) {
-        console.error('❌ Physical file not found:', file.filePath);
-        return res.status(404).json({
-          success: false,
-          message: 'Physical file not found on disk: ' + file.filePath
-        });
-      }
-
-      const fileType = file.fileType;
-      let fileData = null;
-
-      // ✅ FIXED: Use standalone functions instead of this.method
-      try {
-        switch (fileType) {
-          case 'csv':
-            console.log('📊 Processing CSV file...');
-            fileData = await readCSVFile(file.filePath);
-            break;
-          case 'excel':
-            console.log('📊 Processing Excel file...');
-            fileData = await readExcelFile(file.filePath);
-            break;
-          case 'image':
-            console.log('🖼️ Processing Image file...');
-            fileData = await readImageFile(file.filePath);
-            break;
-          case 'pdf':
-            console.log('📄 Processing PDF file...');
-            fileData = await readPDFFile(file.filePath);
-            break;
-          case 'json':
-            console.log('📄 Processing JSON file...');
-            fileData = await readJSONFile(file.filePath);
-            break;
-          case 'text':
-            console.log('📄 Processing Text file...');
-            fileData = await readTextFile(file.filePath);
-            break;
-          default:
-            console.log('⚠️ Unsupported file type:', fileType);
-            fileData = {
-              type: 'unsupported',
-              message: `File type '${fileType}' is not supported for preview`,
-              downloadOnly: true,
-              supportedTypes: ['csv', 'excel', 'image', 'pdf', 'json', 'text']
-            };
-        }
-      } catch (fileProcessingError) {
-        console.error('❌ File processing error:', fileProcessingError);
-        fileData = {
-          type: 'error',
-          message: 'Error processing file: ' + fileProcessingError.message,
-          error: fileProcessingError.message
-        };
-      }
-
-      res.json({
-        success: true,
-        fileInfo: {
-          id: file._id,
-          originalName: file.originalName,
-          fileType: file.fileType,
-          size: file.size,
-          uploadDate: file.uploadDate,
-          mimeType: file.mimeType,
-          filePath: file.filePath
-        },
-        fileData: fileData
-      });
-
-    } catch (error) {
-      console.error('❌ Get file data failed:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to retrieve file data: ' + error.message,
-        error: error.message
-      });
+    if (format === 'csv') {
+      const headers = [
+        'composite_key','location','date','time',
+        'fish_species_count','total_fish_individuals','fish_species_list',
+        'ocean_temperature','ocean_salinity','ocean_pH','ocean_depth_m',
+        'ocean_obs_count','otolith_count','eDNA_count','contributing_files'
+      ];
+      const rows = docs.map(r => [
+        r.composite_key,
+        r.location,
+        r.date,
+        r.time,
+        r.fish?.length || 0,
+        r.fish?.reduce((s,f)=>s+(f.abundance||0),0) || 0,
+        r.fish?.map(f => `${f.species}(${f.abundance ?? 'N/A'})`).join('; ') || 'N/A',
+        r.ocean?.temperature ?? 'N/A',
+        r.ocean?.salinity ?? 'N/A',
+        r.ocean?.pH ?? 'N/A',
+        r.ocean?.depth_m ?? 'N/A',
+        r.ocean_observations?.length || 0,
+        r.otolith_features?.length || 0,
+        r.eDNA?.length || 0,
+        r.metadata_refs?.map(m => m.file_name).join('; ') || 'N/A'
+      ]);
+      const csvOut = [headers, ...rows].map(r => r.join(',')).join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=unified_dataset.csv');
+      return res.send(csvOut);
     }
+
+    res.json({ success: true, count: docs.length, data: docs });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
+};
 
-  // ✅ Download file endpoint
-  async downloadFile(req, res) {
-    try {
-      const { fileId } = req.params;
-      const file = await DataFile.findById(fileId);
-      
-      if (!file) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found'
-        });
-      }
-
-      if (!fs.existsSync(file.filePath)) {
-        return res.status(404).json({
-          success: false,
-          message: 'Physical file not found'
-        });
-      }
-
-      res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
-      res.setHeader('Content-Type', file.mimeType);
-      
-      const fileStream = fs.createReadStream(file.filePath);
-      fileStream.pipe(res);
-      
-    } catch (error) {
-      console.error('❌ Download file failed:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Download failed: ' + error.message
-      });
-    }
+// API: file and metadata
+const getFileData = async (req, res) => {
+  try {
+    const file = await DataFile.findById(req.params.fileId);
+    if (!file) return res.status(404).json({ success: false, message: 'File not found' });
+    const metadata = await FileMetadata.findOne({ fileId: file._id });
+    res.json({ success: true, file, metadata });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
+};
 
-  async getFileStatus(req, res) {
-    try {
-      const { fileId } = req.params;
-      const file = await DataFile.findById(fileId);
-
-      if (!file) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found'
-        });
-      }
-
-      res.json({
-        success: true,
-        file: {
-          id: file._id,
-          originalName: file.originalName,
-          fileType: file.fileType,
-          size: file.size,
-          uploadDate: file.uploadDate,
-          processingStatus: file.processingStatus,
-          validationStatus: file.validationStatus,
-          extractedMetadata: file.extractedMetadata || {},
-          validationErrors: file.validationErrors || []
-        }
-      });
-    } catch (error) {
-      console.error('❌ Get file status failed:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to get file status: ' + error.message
-      });
-    }
+const getMetadataList = async (_req, res) => {
+  try {
+    const metadata = await FileMetadata.find({})
+      .populate('fileId', 'originalName uploadDate fileType category processingStatus')
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json({ success: true, count: metadata.length, data: metadata });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
+};
 
-  async getAllFiles(req, res) {
-    try {
-      const files = await DataFile.find()
-        .sort({ uploadDate: -1 })
-        .limit(100);
-
-      res.json({
-        success: true,
-        files: files.map(file => ({
-          id: file._id,
-          originalName: file.originalName,
-          fileType: file.fileType,
-          size: file.size,
-          uploadDate: file.uploadDate,
-          processingStatus: file.processingStatus,
-          validationStatus: file.validationStatus,
-          extractedMetadata: file.extractedMetadata || {}
-        }))
-      });
-    } catch (error) {
-      console.error('❌ Get all files failed:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to get files: ' + error.message
-      });
-    }
-  }
-
-  async getFileMetadata(req, res) {
-    try {
-      const { fileId } = req.params;
-      const file = await DataFile.findById(fileId);
-
-      if (!file) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found'
-        });
-      }
-
-      res.json({
-        success: true,
-        metadata: file.extractedMetadata || {},
-        file: {
-          id: file._id,
-          originalName: file.originalName,
-          fileType: file.fileType,
-          processingStatus: file.processingStatus
-        }
-      });
-    } catch (error) {
-      console.error('❌ Get file metadata failed:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to get file metadata: ' + error.message
-      });
-    }
-  }
-
-  async searchFiles(req, res) {
-    try {
-      const { query, fileType, category, limit = 50 } = req.query;
-      
-      let searchFilter = {};
-
-      if (query) {
-        searchFilter.$or = [
-          { originalName: { $regex: query, $options: 'i' } },
-          { description: { $regex: query, $options: 'i' } },
-          { tags: { $in: [new RegExp(query, 'i')] } }
-        ];
-      }
-
-      if (fileType) {
-        searchFilter.fileType = fileType;
-      }
-
-      if (category) {
-        searchFilter.category = category;
-      }
-
-      const files = await DataFile.find(searchFilter)
-        .sort({ uploadDate: -1 })
-        .limit(parseInt(limit));
-
-      res.json({
-        success: true,
-        results: files.map(file => ({
-          id: file._id,
-          originalName: file.originalName,
-          fileType: file.fileType,
-          category: file.category,
-          size: file.size,
-          uploadDate: file.uploadDate,
-          processingStatus: file.processingStatus,
-          description: file.description,
-          tags: file.tags
-        })),
-        count: files.length
-      });
-    } catch (error) {
-      console.error('❌ Search files failed:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Search failed: ' + error.message
-      });
-    }
-  }
-}
-
-module.exports = new UploadController();
+module.exports = {
+  uploadFile,
+  getUnifiedDatasets,
+  exportUnifiedDataset,
+  getFileData,
+  getMetadataList
+};

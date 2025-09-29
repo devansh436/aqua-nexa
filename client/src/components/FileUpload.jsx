@@ -1,20 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "react-toastify";
-import { uploadFile, getFileStatus, checkHealth } from "../services/api";
-import FilePreview from "./FilePreview";
-import UploadProgress from "./UploadProgress";
-import {
-  CloudUploadIcon,
-  CheckCircleIcon,
-  ErrorIcon,
-  PendingIcon,
-  VisibilityIcon,
-  DeleteIcon,
-  RefreshIcon,
-  ImageIcon,
-  FileIcon,
-} from "./icons";
+import { uploadFile, getUnifiedDatasets, exportUnifiedDataset } from "../services/api";
 import {
   Box,
   Typography,
@@ -24,193 +11,84 @@ import {
   CardContent,
   Button,
   Chip,
-  IconButton,
-  LinearProgress,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   TextField,
-  Alert,
   List,
   ListItem,
-  ListItemIcon,
   ListItemText,
-  ListItemSecondaryAction,
   Divider,
-  Stack,
-  Avatar,
-  Tooltip,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
+import {
+  CloudUpload,
+  Visibility,
+  Download,
+  DataObject,
+  UnfoldMore,
+  Science,
+} from "@mui/icons-material";
 
-function FileUpload() {
+function UnifiedDatasetUpload() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("other");
   const [description, setDescription] = useState("");
-  const [tags, setTags] = useState("");
-  const [previewDialog, setPreviewDialog] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [serverHealth, setServerHealth] = useState("checking");
+  const [unifiedData, setUnifiedData] = useState([]);
+  const [showUnifiedDialog, setShowUnifiedDialog] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Check server health on component mount
-  React.useEffect(() => {
-    checkServerHealth();
-  }, []);
-
-  const checkServerHealth = async () => {
-    try {
-      await checkHealth();
-      setServerHealth("connected");
-      toast.success("✅ Connected to server!");
-    } catch (error) {
-      setServerHealth("disconnected");
-      toast.error(
-        "❌ Cannot connect to server. Please check if backend is running on port 5000."
-      );
-    }
-  };
-
-  // Enhanced categories with all supported formats
+  // Marine research categories
   const categories = [
     {
-      value: "ocean_data",
-      label: "🌊 Ocean Data",
-      description: "Temperature, salinity, current data",
+      value: "fish_data",
+      label: "🐟 Fish Dataset",
+      description: "Species, length, weight, abundance data",
+      expectedColumns: ["species", "length_cm", "weight_g", "abundance", "age", "location", "date", "time"]
     },
     {
-      value: "satellite_imagery",
-      label: "🛰️ Satellite Imagery",
-      description: "Remote sensing data",
+      value: "ocean_data", 
+      label: "🌊 Ocean Dataset",
+      description: "Temperature, salinity, pH, oxygen data",
+      expectedColumns: ["temperature", "salinity", "dissolved_oxygen", "pH", "depth_m", "turbidity", "location", "date", "time"]
     },
     {
-      value: "research_data",
-      label: "🔬 Research Data",
-      description: "Scientific datasets",
+      value: "otolith_image",
+      label: "🔬 Otolith Images",
+      description: "Fish ear bone microscopy images",
+      expectedColumns: ["image_file", "location", "date", "time"]
     },
     {
-      value: "documents",
-      label: "📄 Documents",
-      description: "Reports, papers, documentation",
+      value: "eDNA_data",
+      label: "🧬 eDNA Dataset", 
+      description: "Environmental DNA sequences",
+      expectedColumns: ["sequence_id", "matched_species", "location", "date", "time"]
     },
     {
       value: "other",
       label: "📁 Other",
-      description: "General files",
-    },
+      description: "General marine research data",
+      expectedColumns: []
+    }
   ];
 
-  // File type icon mapping
-  const getFileIcon = (fileType) => {
-    if (fileType?.startsWith("image/")) return <ImageIcon color="primary" />;
-    if (fileType?.includes("pdf")) return <FileIcon color="error" />;
-    if (fileType?.includes("excel") || fileType?.includes("csv"))
-      return <FileIcon color="success" />;
-    if (fileType?.includes("word")) return <FileIcon color="info" />;
-    if (fileType?.includes("json")) return <FileIcon color="warning" />;
-    if (fileType?.includes("zip") || fileType?.includes("archive"))
-      return <FileIcon color="secondary" />;
-    return <FileIcon color="action" />;
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "N/A";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-
-  // Handle file upload
-  const handleUpload = async (files) => {
-    if (serverHealth !== "connected") {
-      toast.error("Please ensure the server is running before uploading files");
-      return;
-    }
-
-    setUploading(true);
-    setUploadProgress(0);
-
-    try {
-      const uploadPromises = files.map(async (file, index) => {
-        const metadata = {
-          category: selectedCategory,
-          description: description,
-          tags: tags,
-        };
-
-        try {
-          setUploadProgress((prev) => prev + 90 / files.length);
-
-          const response = await uploadFile(file, metadata);
-
-          const newFile = {
-            id: response.fileId || Date.now() + index,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            category: selectedCategory,
-            description: description,
-            tags: tags,
-            status: "completed",
-            uploadDate: new Date().toISOString(),
-            extractedMetadata: response.metadata,
-            preview: file.type.startsWith("image/")
-              ? URL.createObjectURL(file)
-              : null,
-            file: file,
-          };
-
-          setUploadedFiles((prev) => [...prev, newFile]);
-          toast.success(`✅ ${file.name} uploaded successfully!`);
-
-          return newFile;
-        } catch (error) {
-          console.error(`Upload failed for ${file.name}:`, error);
-
-          const failedFile = {
-            id: Date.now() + index,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            category: selectedCategory,
-            status: "failed",
-            error: error.message,
-            uploadDate: new Date().toISOString(),
-          };
-
-          setUploadedFiles((prev) => [...prev, failedFile]);
-          toast.error(`❌ Failed to upload ${file.name}: ${error.message}`);
-
-          return failedFile;
-        }
-      });
-
-      await Promise.all(uploadPromises);
-      setUploadProgress(100);
-
-      // Reset form
-      setDescription("");
-      setTags("");
-      setSelectedCategory("other");
-    } catch (error) {
-      console.error("Upload process failed:", error);
-      toast.error("Upload process failed");
-    } finally {
-      setUploading(false);
-      setTimeout(() => setUploadProgress(0), 1000);
-    }
-  };
-
-  // Dropzone configuration
   const onDrop = useCallback(
     (acceptedFiles, rejectedFiles) => {
       if (rejectedFiles.length > 0) {
         rejectedFiles.forEach((rejection) => {
-          toast.error(
-            `❌ ${rejection.file.name}: ${rejection.errors[0].message}`
-          );
+          toast.error(`❌ ${rejection.file.name}: ${rejection.errors[0].message}`);
         });
       }
 
@@ -218,346 +96,369 @@ function FileUpload() {
         handleUpload(acceptedFiles);
       }
     },
-    [selectedCategory, description, tags, serverHealth]
+    [selectedCategory, description]
   );
 
-  const { getRootProps, getInputProps, isDragActive, isDragReject } =
-    useDropzone({
-      onDrop,
-      accept: {
-        "image/*": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"],
-        "application/vnd.ms-excel": [".xls"],
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-          ".xlsx",
-        ],
-        "text/csv": [".csv"],
-        "application/pdf": [".pdf"],
-        "application/msword": [".doc"],
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-          [".docx"],
-        "text/plain": [".txt"],
-        "application/json": [".json"],
-        "application/xml": [".xml"],
-        "application/zip": [".zip"],
-        "application/x-netcdf": [".nc"],
-      },
-      maxSize: 500 * 1024 * 1024, // 500MB
-      multiple: true,
-    });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "text/csv": [".csv"],
+      "application/vnd.ms-excel": [".xls"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "image/*": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"],
+      "application/json": [".json"]
+    },
+    maxSize: 500 * 1024 * 1024, // 500MB
+    multiple: true,
+  });
 
-  // Handle preview
-  const handlePreview = (file) => {
-    setSelectedFile(file);
-    setPreviewDialog(true);
+  const handleUpload = async (files) => {
+    setUploading(true);
+    
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const metadata = {
+          category: selectedCategory,
+          description: description,
+        };
+
+        try {
+          const response = await uploadFile(file, metadata);
+          const newFile = {
+            id: response.fileId,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            category: selectedCategory,
+            description: description,
+            status: "completed",
+            uploadDate: new Date().toISOString(),
+          };
+
+          setUploadedFiles((prev) => [...prev, newFile]);
+          toast.success(`✅ ${file.name} uploaded and processed successfully!`);
+          return newFile;
+        } catch (error) {
+          console.error(`Upload failed for ${file.name}:`, error);
+          toast.error(`❌ Failed to upload ${file.name}: ${error.message}`);
+          return null;
+        }
+      });
+
+      await Promise.all(uploadPromises);
+      
+      // Reset form
+      setDescription("");
+      setSelectedCategory("other");
+      
+    } catch (error) {
+      console.error("Upload process failed:", error);
+      toast.error("Upload process failed");
+    } finally {
+      setUploading(false);
+    }
   };
 
-  // Handle file deletion
-  const handleDeleteFile = (fileId) => {
-    setUploadedFiles((prev) => prev.filter((file) => file.id !== fileId));
-    toast.info("File removed from list");
+  const handleViewUnifiedData = async () => {
+    setLoading(true);
+    try {
+      const response = await getUnifiedDatasets();
+      setUnifiedData(response.data || []);
+      setShowUnifiedDialog(true);
+      toast.success(`📊 Loaded ${response.count || 0} unified records`);
+    } catch (error) {
+      console.error("Failed to load unified data:", error);
+      toast.error("Failed to load unified datasets");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Server health status component
-  const ServerHealthStatus = () => (
-    <Box sx={{ mb: 2 }}>
-      <Alert
-        severity={
-          serverHealth === "connected"
-            ? "success"
-            : serverHealth === "disconnected"
-            ? "error"
-            : "info"
-        }
-        action={
-          <IconButton size="small" onClick={checkServerHealth}>
-            <RefreshIcon />
-          </IconButton>
-        }
-      >
-        {serverHealth === "connected" && "✅ Server connected"}
-        {serverHealth === "disconnected" &&
-          "❌ Server disconnected - Please start the backend server on port 5000"}
-        {serverHealth === "checking" && "🔄 Checking server connection..."}
-      </Alert>
-    </Box>
-  );
+  const handleExportData = async (format = 'csv') => {
+    try {
+      const response = await exportUnifiedDataset(format);
+      
+      if (format === 'csv') {
+        // Create and download CSV file
+        const blob = new Blob([response], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'unified_marine_dataset.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        toast.success("📥 CSV export downloaded successfully!");
+      } else {
+        // JSON export
+        const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'unified_marine_dataset.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        toast.success("📥 JSON export downloaded successfully!");
+      }
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast.error("Failed to export unified dataset");
+    }
+  };
+
+  const selectedCategoryInfo = categories.find(cat => cat.value === selectedCategory);
 
   return (
-    <Box sx={{ p: 3, maxWidth: "100%", margin: "0 auto" }}>
-      <Typography
-        variant="h4"
-        gutterBottom
-        sx={{ fontWeight: "bold", mb: 3, color: "black" }}
-      >
-        📁 File Upload Center
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        🌊 Unified Marine Dataset Platform
+      </Typography>
+      
+      <Typography variant="subtitle1" color="text.secondary" paragraph>
+        Upload fish data, ocean conditions, otolith images, and eDNA sequences. 
+        The system will automatically extract metadata, standardize formats, and create unified datasets.
       </Typography>
 
-      <ServerHealthStatus />
-
+      {/* Upload Section */}
       <Grid container spacing={3}>
-        {/* Upload Section */}
         <Grid item xs={12} md={6}>
-          <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+          <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Upload Configuration
+              📁 Upload Configuration
             </Typography>
+            
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Dataset Category</InputLabel>
+              <Select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                label="Dataset Category"
+              >
+                {categories.map((category) => (
+                  <MenuItem key={category.value} value={category.value}>
+                    <Box>
+                      <Typography variant="body1">{category.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {category.description}
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-            <Stack spacing={2} sx={{ mb: 3 }}>
-              <FormControl fullWidth>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  label="Category"
-                >
-                  {categories.map((category) => (
-                    <MenuItem key={category.value} value={category.value}>
-                      <Box>
-                        <Typography variant="body1">
-                          {category.label}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          component="div"
-                        >
-                          {category.description}
-                        </Typography>
-                      </Box>
-                    </MenuItem>
+            {selectedCategoryInfo && selectedCategoryInfo.expectedColumns.length > 0 && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Expected columns for {selectedCategoryInfo.label}:
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selectedCategoryInfo.expectedColumns.map((col) => (
+                    <Chip key={col} label={col} size="small" variant="outlined" />
                   ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                label="Description (Optional)"
-                multiline
-                rows={2}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe your file..."
-              />
-
-              <TextField
-                label="Tags (Optional)"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="Enter tags separated by commas..."
-              />
-            </Stack>
-
-            {/* Dropzone */}
-            <Paper
-              {...getRootProps()}
-              elevation={isDragActive ? 8 : 1}
-              sx={{
-                p: 4,
-                textAlign: "center",
-                cursor: "pointer",
-                border: "2px dashed",
-                borderColor: isDragReject
-                  ? "error.main"
-                  : isDragActive
-                  ? "primary.main"
-                  : "grey.300",
-                bgcolor: isDragReject
-                  ? "error.light"
-                  : isDragActive
-                  ? "primary.light"
-                  : "grey.50",
-                transition: "all 0.3s ease",
-                "&:hover": {
-                  bgcolor: "primary.light",
-                  borderColor: "primary.main",
-                },
-              }}
-            >
-              <input {...getInputProps()} />
-              <CloudUploadIcon
-                sx={{ fontSize: 48, color: "primary.main", mb: 2 }}
-              />
-
-              {isDragReject ? (
-                <Typography color="error">
-                  Some files will be rejected
-                </Typography>
-              ) : isDragActive ? (
-                <Typography variant="h6" color="primary">
-                  Drop files here...
-                </Typography>
-              ) : (
-                <>
-                  <Typography variant="h6" gutterBottom>
-                    Drag & Drop Files Here
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    gutterBottom
-                  >
-                    or click to select files
-                  </Typography>
-                </>
-              )}
-
-              {/* Fixed: Use component="div" to avoid p > div nesting */}
-              <Typography
-                variant="caption"
-                display="block"
-                sx={{ mt: 2 }}
-                component="div"
-              >
-                <strong>Supported formats:</strong> Images (JPG, PNG, GIF, BMP,
-                TIFF, WebP), Spreadsheets (CSV, XLSX, XLS), Documents (PDF, DOC,
-                DOCX, TXT), Data (JSON, XML), Archives (ZIP), Scientific
-                (NetCDF)
-              </Typography>
-              <Typography
-                variant="caption"
-                display="block"
-                color="primary"
-                component="div"
-              >
-                <strong>Maximum file size: 500MB per file</strong>
-              </Typography>
-            </Paper>
-
-            {uploading && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" gutterBottom>
-                  Uploading... {Math.round(uploadProgress)}%
-                </Typography>
-                <LinearProgress variant="determinate" value={uploadProgress} />
+                </Box>
               </Box>
             )}
+
+            <TextField
+              fullWidth
+              margin="normal"
+              label="Description"
+              multiline
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe your dataset..."
+            />
           </Paper>
         </Grid>
 
-        {/* Uploaded Files Section */}
         <Grid item xs={12} md={6}>
-          <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              📋 Uploaded Files ({uploadedFiles.length})
-            </Typography>
-
-            {uploadedFiles.length === 0 ? (
-              <Box sx={{ textAlign: "center", py: 4 }}>
-                <FileIcon sx={{ fontSize: 64, color: "grey.400", mb: 2 }} />
-                <Typography color="text.secondary">
-                  No files uploaded yet
-                </Typography>
-              </Box>
+          {/* Dropzone */}
+          <Paper
+            {...getRootProps()}
+            sx={{
+              p: 4,
+              textAlign: 'center',
+              cursor: 'pointer',
+              border: '2px dashed',
+              borderColor: isDragActive ? 'primary.main' : 'grey.300',
+              bgcolor: isDragActive ? 'primary.light' : 'background.paper',
+              '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'primary.light'
+              }
+            }}
+          >
+            <input {...getInputProps()} />
+            <CloudUpload sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+            
+            {isDragActive ? (
+              <Typography variant="h6">Drop files here...</Typography>
             ) : (
-              <List sx={{ maxHeight: 600, overflowY: "auto" }}>
-                {uploadedFiles.map((file, index) => (
-                  <React.Fragment key={file.id}>
-                    <ListItem sx={{ py: 2 }}>
-                      <ListItemIcon>
-                        <Avatar sx={{ bgcolor: "grey.100" }}>
-                          {getFileIcon(file.type)}
-                        </Avatar>
-                      </ListItemIcon>
-
-                      <ListItemText
-                        primary={
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1,
-                            }}
-                          >
-                            <Typography
-                              variant="subtitle2"
-                              noWrap
-                              sx={{ maxWidth: 200 }}
-                            >
-                              {file.name}
-                            </Typography>
-                            <Chip
-                              size="small"
-                              label={file.status}
-                              color={
-                                file.status === "completed"
-                                  ? "success"
-                                  : "error"
-                              }
-                              icon={
-                                file.status === "completed" ? (
-                                  <CheckCircleIcon />
-                                ) : (
-                                  <ErrorIcon />
-                                )
-                              }
-                            />
-                          </Box>
-                        }
-                        secondary={
-                          <Stack spacing={0.5}>
-                            {/* Fixed: Use component="div" for Typography containing complex content */}
-                            <Typography variant="caption" component="div">
-                              Size: {formatFileSize(file.size)} • Category:{" "}
-                              {file.category?.replace("_", " ")} •
-                              {new Date(file.uploadDate).toLocaleString()}
-                            </Typography>
-                            {file.error && (
-                              <Typography
-                                variant="caption"
-                                color="error"
-                                component="div"
-                              >
-                                Error: {file.error}
-                              </Typography>
-                            )}
-                          </Stack>
-                        }
-                      />
-
-                      <ListItemSecondaryAction>
-                        <Stack direction="row" spacing={1}>
-                          {file.status === "completed" && (
-                            <Tooltip title="Preview File">
-                              <IconButton
-                                size="small"
-                                onClick={() => handlePreview(file)}
-                                color="primary"
-                              >
-                                <VisibilityIcon />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                          <Tooltip title="Remove from List">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleDeleteFile(file.id)}
-                              color="error"
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </Stack>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                    {index < uploadedFiles.length - 1 && <Divider />}
-                  </React.Fragment>
-                ))}
-              </List>
+              <>
+                <Typography variant="h6" gutterBottom>
+                  Drag & Drop Marine Research Files
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  or click to select files
+                </Typography>
+              </>
             )}
+            
+            <Typography variant="caption" display="block" sx={{ mt: 2 }}>
+              Supported: CSV, Excel, Images (JPG, PNG, TIFF), JSON<br/>
+              Maximum size: 500MB per file
+            </Typography>
           </Paper>
         </Grid>
       </Grid>
 
-      {/* File Preview Modal */}
-      <FilePreview
-        open={previewDialog}
-        onClose={() => {
-          setPreviewDialog(false);
-          setSelectedFile(null);
-        }}
-        file={selectedFile}
-      />
+      {uploading && (
+        <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+          <Typography>🔄 Processing files and creating unified datasets...</Typography>
+        </Box>
+      )}
+
+      {/* Action Buttons */}
+      <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <Button
+          variant="contained"
+          startIcon={<DataObject />}
+          onClick={handleViewUnifiedData}
+          disabled={loading}
+        >
+          {loading ? 'Loading...' : 'View Unified Datasets'}
+        </Button>
+        
+        <Button
+          variant="outlined"
+          startIcon={<Download />}
+          onClick={() => handleExportData('csv')}
+        >
+          Export CSV
+        </Button>
+        
+        <Button
+          variant="outlined"
+          startIcon={<Download />}
+          onClick={() => handleExportData('json')}
+        >
+          Export JSON
+        </Button>
+      </Box>
+
+      {/* Uploaded Files List */}
+      {uploadedFiles.length > 0 && (
+        <Paper sx={{ mt: 3, p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            📋 Uploaded Files ({uploadedFiles.length})
+          </Typography>
+          
+          <List>
+            {uploadedFiles.map((file, index) => (
+              <React.Fragment key={file.id}>
+                <ListItem>
+                  <ListItemText
+                    primary={file.name}
+                    secondary={
+                      <Box>
+                        <Typography component="span" variant="body2">
+                          Size: {(file.size / 1024 / 1024).toFixed(2)} MB • 
+                          Category: {file.category} • 
+                          Status: {file.status}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  <Chip 
+                    label={file.category.replace('_', ' ')} 
+                    color="primary" 
+                    size="small" 
+                  />
+                </ListItem>
+                {index < uploadedFiles.length - 1 && <Divider />}
+              </React.Fragment>
+            ))}
+          </List>
+        </Paper>
+      )}
+
+      {/* Unified Data Dialog */}
+      <Dialog 
+        open={showUnifiedDialog} 
+        onClose={() => setShowUnifiedDialog(false)}
+        maxWidth="xl"
+        fullWidth
+      >
+        <DialogTitle>
+          🔬 Unified Marine Datasets ({unifiedData.length} records)
+        </DialogTitle>
+        <DialogContent>
+          {unifiedData.length > 0 ? (
+            <TableContainer component={Paper}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Location</TableCell>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Time</TableCell>
+                    <TableCell>Fish Species</TableCell>
+                    <TableCell>Ocean Temp (°C)</TableCell>
+                    <TableCell>Salinity</TableCell>
+                    <TableCell>Otolith Features</TableCell>
+                    <TableCell>eDNA Species</TableCell>
+                    <TableCell>Source Files</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {unifiedData.slice(0, 50).map((record, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{record.location}</TableCell>
+                      <TableCell>{record.date}</TableCell>
+                      <TableCell>{record.time}</TableCell>
+                      <TableCell>{record.fish?.species || 'N/A'}</TableCell>
+                      <TableCell>{record.ocean?.temperature || 'N/A'}</TableCell>
+                      <TableCell>{record.ocean?.salinity || 'N/A'}</TableCell>
+                      <TableCell>
+                        {record.otolith_features?.circularity ? 
+                          `C: ${record.otolith_features.circularity}` : 'N/A'}
+                      </TableCell>
+                      <TableCell>{record.eDNA?.matched_species || 'N/A'}</TableCell>
+                      <TableCell>
+                        {record.metadata_refs?.length || 0} files
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography>No unified datasets found. Upload some data files first.</Typography>
+          )}
+          
+          {unifiedData.length > 50 && (
+            <Typography variant="caption" sx={{ mt: 2, display: 'block' }}>
+              Showing first 50 records of {unifiedData.length} total records.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowUnifiedDialog(false)}>Close</Button>
+          <Button 
+            variant="contained" 
+            onClick={() => handleExportData('csv')}
+            startIcon={<Download />}
+          >
+            Export All Data
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
 
-export default FileUpload;
+export default UnifiedDatasetUpload;
